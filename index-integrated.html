@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>淵</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- Firebase v9 compat -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBYEPxGXwZW2JLLlHM7a9Ja_UNHZtv-Nug",
+  authDomain:        "buthi0809.firebaseapp.com",
+  projectId:         "buthi0809",
+  storageBucket:     "buthi0809.firebasestorage.app",
+  messagingSenderId: "64378456633",
+  appId:             "1:64378456633:web:8c42d6069e5080fb6d5be8",
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+const storage = firebase.storage();
+const auth = firebase.auth();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Libre+[...]
+<style>* { box-sizing:border-box; margin:0; padding:0; } body { background:#07070f; } #root { min-height:100vh; }</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ═══════════════════════════════════════════════════════
+// 99 MEN STORIES DATA
+// ═══════════════════════════════════════════════════════
+const NINETY_NINE_MEN_STORIES = [
+  {num:1, cat:"都市", title:"信号待ち男", text:"彼は毎朝、七時十五分に交差点へ現れる。\n\n青信号が点灯しても、彼は渡らない。足を一歩も踏み出さず、ただ赤に変わるのを待つ。通行人は初め怪訝な顔をするが、やがて彼の存在に慣れ、誰も気にしなくなった。\n\n彼が最後に渡ったのは、三年前の十月だった。あの日、向かいのビルで一人の老人が死んだ。心筋梗塞だったと翌日の地方紙は伝えた。彼だけが知っていた。自分が渡るたびに、街の誰かが逝くことを。\n\n今日も青が灯る。彼の足は動かない。赤になると、ほんの少しだけ、肩の力が抜けた。\n\n「まだ、いい」と彼は呟く。誰でもない誰かに向けて。横断歩道の白いラインが、午後の日差しに灼けている。",
+   choices:[
+     {label:"「渡りましょう」と手を引いた", result:"彼の手は冷たかった。一歩踏み出した瞬間、遠くで救急車のサイレンが鳴った。彼は立ち止まり、私を見た。「大丈夫です」と彼は言った。「今日の分は、もう決まっていたから」"},
+     {label:"隣で一緒に待つことにした", result:"三十分、私たちは何も言わずに並んで立った。赤が点灯するたびに、彼の肩が少し下がった。やがて彼は「ありがとうございます」と言った。理由はわからなかった。でも十分だった。"}
+   ]},
+  {num:2, cat:"都市", title:"電柱男", text:"彼を見かけるようになったのは、町内に防犯カメラが増えた頃だった。\n\n四丁目と五丁目の境界にある電柱のそば、彼は毎晩直立している。雨の夜も、霜の朝も。電線が風に揺れるたび、彼は目を細め、なにかに耳を澄ます。\n\n隣の山田さんが不倫をしていることを、彼は知っている。三軒先の田中家で夫婦喧嘩があった夜も、彼の表情は微かに曇った。街中の盗聴器のようなものだと、私はひそかに思っている。\n\n一度だけ話しかけたことがある。「何を聞いているんですか」。彼は電線を見上げたまま答えた。\n\n「街が、泣いているんです」\n\nその夜、隣の家の電球が一斉に切れた。"},
+  {num:3, cat:"都市", title:"公衆電話男", text:"駅前に一台だけ残った公衆電話のそばで、彼はいつも受話器を握っている。\n\n繋がらない番号にかけ続けているのだと、後に知った。押すたびに違う数字の羅列。意味のないランダムな配列。それでも彼は耳を押し当て、じっと待つ。\n\n一月に一度だけ、繋がることがあるという。「過去」に通じた時は、誰かの懐かしい声が聞こえる。「死後」に通じた時は、無音の中にかすかな呼吸音がするだけだと彼は言った。\n\n「どちらが怖いですか」と訊いた。\n\n「過去です」と彼は答えた。「死者は何も責めない。でも、昔の自分の声は、今の私をずっと見ている気がして」\n\n今日も彼はかけている。繋がらない番号を。",
+   altText:"彼女が電話を覗いてくる。妙に真剣な顔で。「どちらが怖いですか」と彼女は訊く。\n\n私は答えながら、気づいていた。本当はこの質問を、誰かにずっとしてほしかったのだと。\n\n電話は今日も繋がらない。でも、隣に人がいる。それだけで、少し違う音がする気がした。"},
+  {num:12, cat:"都市", title:"ゴミ箱男", text:"彼は毎朝、街を歩く。\n\nそれだけに見える。昼も夜も、何かを拾っているわけでもない。でも、彼が通り過ぎた後、なぜかみんな少しだけ軽くなる。\n\n長年引きずっていた後悔が、翌朝には薄れている。誰かへの怒りが、気づけば色を失っている。恋人を忘れられなかった男が、彼とすれ違った夕方から急に前を向けるようになった。\n\n「何を食べているんですか」と訊いた。\n\n彼は少し考えてから言った。「不要になったものです。ずっと持っていても腐るものを、頂いているだけです」\n\n「苦くないですか」\n\n「慣れました」と彼は言った。「でも、たまに誰かの初恋が混じっていると、甘いんです。捨てたくないのに捨てた感情は、一番甘い」\n\n彼は次の角を曲がって消えた。",
+   choices:[
+     {label:"「私の後悔も、持っていきますか」と訊いた", result:"彼は立ち止まり、私の顔をじっと見た。「それは、まだ腐っていません」と彼は言った。「後悔している間は、まだあなたにとって大切なものです。捨てるのは、もう少し後にしましょう」"},
+     {label:"黙って見送った", result:"彼の背中が遠ざかるにつれ、胸の奥にあった何かが、少し溶けた。何を失ったのかわかりません。でも、歩くのが少し軽くなりました。"}
+   ]},
+  {num:95, cat:"時空", title:"透明男", text:"彼は、誰にも気づかれない。\n\n目の前にいても、声をかけても、誰も彼を認識しない。彼は、世界の景色の一部として、完全に同化していた。彼が透明になれるのは、彼自身が「自分はいない」と信じ込んでいるからだった。\n\n「私はあなたが見えるよ」と声をかけた。\n\n彼は驚いた顔で私を見た。その瞬間、彼の体が輪郭を持ち、色が付き始めた。「見つけてくれて、ありがとう」と彼は泣いた。「誰かに見られることで、初めて私は人間になれた。見られない時間は、死んでいるのと変わらなかった」\n\n彼は、誰かの視線を浴びることで、ようやくこの世界に繋ぎ止められていた。彼は、孤独という名の透明な檻から、私の言葉で救い出された。",
+   choices:[
+     {label:"「ずっと見ていたよ」と言った", result:"彼の目から涙がこぼれた。「嘘です」と彼は言った。でも、嬉しそうだった。「嘘でもいい」と彼は続けた。「嘘でもいいから、そう言ってほしかった。ずっと」。彼の輪郭が、少し濃くなった気がした。"},
+     {label:"「他に見えている人は？」と訊いた", result:"「いません」と彼は即答した。「だから、あなたが怖い」。彼は一歩下がった。「見られることに、慣れていないんです。消えたくなる」。「消えないで」と私は言った。彼は黙って、そこに立ち続けた。"}
+   ]},
+];
+
+// ═══════════════ DEFAULT DATA ═══════════════
+const DEFAULT_SITE = {
+  name:"淵", nameRoman:"BUNSO",
+  catchcopy:"言葉は、暗闇の中にこそ輝く。",
+  description:"書くことは、存在することの証明である。\nここに集められた物語たちは、深夜の孤独から生まれた。",
+  footerText:"すべての著作権は各著者に帰属します",
+  theme:{ font:"serif", accent:"#c8a86a", bg:"#07070f" },
+};
+
+const DEFAULT_AUTHOR = {
+  name:"蒼井 玲", nameRoman:"Rei Aoi",
+  bio:"1989年、京都生まれ。心理文学・思弁小説を中心に執筆。「言葉は暗闇の中にこそ輝く」を信条とし、人間の内面の最も深い部分を掘り下げること。",
+  influences:"カフカ, ドストエフスキー, 安部公房, カミュ", since:"2020",
+  icon:"", links:[], murmurs:[],
+};
+
+const DEFAULT_NOVELS = [];
+
+const isDataUri = s => typeof s === "string" && s.startsWith("data:");
+
+async function compressImage(dataUri, maxPx=800, quality=0.72) {
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const scale = Math.min(1, maxPx/Math.max(img.width,img.height));
+      const w = Math.round(img.width*scale);
+      const h = Math.round(img.height*scale);
+      const canvas = document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = ()=>resolve(dataUri);
+    img.src = dataUri;
+  });
+}
+
+function useStore() {
+  const [site,    setSiteLocal]   = useState(DEFAULT_SITE);
+  const [author,  setAuthorLocal] = useState(DEFAULT_AUTHOR);
+  const [novels,  setNovelsLocal] = useState([]);
+  const [messages,setMsgLocal]    = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [dbError, setDbError]     = useState(null);
+
+  useEffect(() => {
+    const unsubs = [];
+    let resolved = 0;
+    const check = () => { resolved++; if(resolved >= 4) setLoading(false); };
+
+    unsubs.push(db.collection("settings").doc("site").onSnapshot(snap => {
+      if (snap.exists) setSiteLocal(snap.data()); else setSiteLocal(DEFAULT_SITE);
+      check();
+    }, e => { setDbError(e.message); check(); }));
+
+    unsubs.push(db.collection("settings").doc("author").onSnapshot(snap => {
+      if (snap.exists) setAuthorLocal(snap.data()); else setAuthorLocal(DEFAULT_AUTHOR);
+      check();
+    }, e => { setDbError(e.message); check(); }));
+
+    unsubs.push(db.collection("novels").orderBy("createdAt","asc").onSnapshot(snap => {
+      setNovelsLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      check();
+    }, e => { setDbError(e.message); check(); }));
+
+    unsubs.push(db.collection("messages").orderBy("createdAt","desc").onSnapshot(snap => {
+      setMsgLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      check();
+    }, e => { setDbError(e.message); check(); }));
+
+    return () => unsubs.forEach(u => u());
+  }, []);
+
+  const uid = () => db.collection("_").doc().id;
+
+  const setSite = useCallback(async v => {
+    const next = typeof v === "function" ? v(site) : v;
+    setSiteLocal(next);
+    try { await db.collection("settings").doc("site").set(next); } catch(e) { console.error(e); }
+  }, [site]);
+
+  const setAuthor = useCallback(async v => {
+    const next = typeof v === "function" ? v(author) : v;
+    let toSave = next;
+    if (isDataUri(next.icon)) {
+      try {
+        const url = await compressImage(next.icon, 400, 0.80);
+        toSave = { ...next, icon: url };
+        setAuthorLocal(toSave);
+      } catch(e) { console.error(e); }
+    } else {
+      setAuthorLocal(next);
+    }
+    try { await db.collection("settings").doc("author").set(toSave); } catch(e) { console.error(e); }
+  }, [author]);
+
+  const addNovel = async () => {
+    const now = firebase.firestore.FieldValue.serverTimestamp();
+    const data = {
+      title:"新しい作品", subtitle:"", author:author.name, genre:"小説",
+      tags:[], description:"", color1:"#0a0a14", color2:"#1a1a2e", accent:"#c8a86a",
+      wordCount:"", updated: new Date().toISOString().slice(0,7),
+      chapters:[], createdAt: now, pinned:false, locked:false,
+    };
+    const ref = await db.collection("novels").add(data);
+    return ref.id;
+  };
+
+  const updateNovel = async (id, patch) => {
+    setNovelsLocal(a => a.map(n => n.id===id ? {...n,...patch} : n));
+    try { await db.collection("novels").doc(id).update(patch); } catch(e) { console.error(e); }
+  };
+
+  const deleteNovel = async id => {
+    setNovelsLocal(a => a.filter(n => n.id!==id));
+    try { await db.collection("novels").doc(id).delete(); } catch(e) { console.error(e); }
+  };
+
+  const addChapter = async nid => {
+    const cid = uid();
+    const ch = { id: cid, title:"新しい章", content:"" };
+    const novel = novels.find(n => n.id===nid);
+    const updated = [...(novel?.chapters||[]), ch];
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
+    return cid;
+  };
+
+  const updateChapter = async (nid, cid, patch) => {
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.chapters||[]).map(c => c.id===cid ? {...c,...patch} : c);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
+  };
+
+  const deleteChapter = async (nid, cid) => {
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.chapters||[]).filter(c => c.id!==cid);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
+  };
+
+  const addMessage = async m => {
+    const data = { ...m, date: new Date().toLocaleString("ja-JP"), read: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp() };
+    try { await db.collection("messages").add(data); } catch(e) { console.error(e); }
+  };
+
+  const deleteMessage = async id => {
+    setMsgLocal(a => a.filter(m => m.id!==id));
+    try { await db.collection("messages").doc(id).delete(); } catch(e) { console.error(e); }
+  };
+
+  const markRead = async id => {
+    setMsgLocal(a => a.map(m => m.id===id ? {...m,read:true} : m));
+    try { await db.collection("messages").doc(id).update({ read: true }); } catch(e) { console.error(e); }
+  };
+
+  const addMurmur = async (text, files) => {
+    const mid = uid();
+    const now = new Date();
+    let uploadedFiles = [];
+    try { uploadedFiles = files||[]; }
+    catch(e) { console.error(e); uploadedFiles = files||[]; }
+    const m = { id: mid, text, files: uploadedFiles, date: now.toLocaleString("ja-JP"), isoDate: now.toISOString() };
+    const nextMurmurs = [m, ...(author.murmurs||[])];
+    setAuthorLocal(a => ({...a, murmurs: nextMurmurs}));
+    try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
+  };
+
+  const deleteMurmur = async id => {
+    const nextMurmurs = (author.murmurs||[]).filter(m => m.id!==id);
+    setAuthorLocal(a => ({...a, murmurs: nextMurmurs}));
+    try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
+  };
+
+  const updateMurmur = async (id, text) => {
+    const nextMurmurs = (author.murmurs||[]).map(m => m.id===id ? {...m, text} : m);
+    setAuthorLocal(a => ({...a, murmurs: nextMurmurs}));
+    try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
+  };
+
+  return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
+    addMessage, deleteMessage, markRead,
+    addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
+    addMurmur, deleteMurmur, updateMurmur };
+}
+
+// ═══════════════ HELPERS ═══════════════
+function groupByYM(items, getISO) {
+  const map = new Map();
+  items.forEach(item => {
+    let ym = "不明";
+    try { const d=new Date(getISO(item)); if(!isNaN(d)) ym=`${d.getFullYear()}年${d.getMonth()+1}月`; } catch {}
+    if(!map.has(ym)) map.set(ym,[]);
+    map.get(ym).push(item);
+  });
+  return [...map.entries()].sort(([a],[b])=>{
+    if(a==="不明") return 1; if(b==="不明") return -1;
+    const parse=s=>{ const m=s.match(/(\d+)年(\d+)月/); return m?new Date(+m[1],+m[2]-1):new Date(0); };
+    return parse(a)-parse(b);
+  });
+}
+
+const THEMES=[
+  {label:"深夜",bg:"#07070f",accent:"#c8a86a"},{label:"紺碧",bg:"#060d14",accent:"#38bdf8"},
+  {label:"緋",bg:"#100808",accent:"#f87171"},{label:"翠",bg:"#07100a",accent:"#4ade80"},
+  {label:"白夜",bg:"#f5f0e8",accent:"#6b4c2a"},{label:"霧",bg:"#111118",accent:"#a78bfa"},
+  {label:"琥珀",bg:"#0f0c07",accent:"#fb923c"},{label:"銀",bg:"#0d0d0d",accent:"#94a3b8"},
+];
+
+function linkIcon(url){
+  if(url.includes("x.com")||url.includes("twitter.com"))return"𝕏";
+  if(url.includes("instagram"))return"📷";
+  if(url.includes("note.com"))return"📝";
+  if(url.includes("pixiv"))return"🎨";
+  if(url.includes("youtube"))return"▶️";
+  if(url.includes("github"))return"🐙";
+  return"🔗";
+}
+
+function fmtDate(iso){
+  try{ const d=new Date(iso); if(isNaN(d))return iso; return`${d.getFullYear()}年${d.getMonth()+1}月`; }catch{ return iso; }
+}
+
+// ═══════════════ 99MEN COMPONENT ═══════════════
+function NinetyNineMen({site}) {
+  const [currentManIndex, setCurrentManIndex] = useState(0);
+  const [readMen, setReadMen] = useState(() => JSON.parse(localStorage.getItem('read99Men')) || {});
+  const [currentPerspective, setCurrentPerspective] = useState('main');
+  const [showStory, setShowStory] = useState(false);
+  const [showCollection, setShowCollection] = useState(false);
+
+  const man = NINETY_NINE_MEN_STORIES[currentManIndex];
+
+  const handleShowStory = () => {
+    setShowStory(true);
+    setReadMen(prev => {
+      const next = { ...prev, [man.num]: true };
+      localStorage.setItem('read99Men', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleNextMan = () => {
+    setCurrentManIndex(Math.floor(Math.random() * NINETY_NINE_MEN_STORIES.length));
+    setShowStory(false);
+    setCurrentPerspective('main');
+  };
+
+  const readCount = Object.keys(readMen).length;
+
+  return (
+    <div style={{ padding: '100px 40px 60px', maxWidth: '800px', margin: '0 auto' }}>
+      {!showStory ? (
+        <div style={{ textAlign: 'center' }}>
+          <button onClick={() => setShowCollection(!showCollection)} 
+            style={{ position: 'absolute', top: '80px', right: '40px', background: 'none', border: `1px solid ${site.theme?.accent||'#c8a86a'}`, 
+              color: site.theme?.accent||'#c8a86a', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', letterSpacing: '0.15rem' }}>
+            既読一覧 <span style={{ background: site.theme?.accent||'#c8a86a', color: '#000', padding: '1px 5px', borderRadius: '8px', marginLeft: '4px' }}>{readCount}</span>
+          </button>
+
+          <div style={{ marginBottom: '3rem', opacity: 0.6, fontSize: '14px', letterSpacing: '0.08em' }}>すれ違った男</div>
+          <h2 style={{ fontFamily: 'var(--serif)', fontSize: '2.5rem', fontWeight: 300, marginBottom: '1rem', letterSpacing: '0.06em' }}>{man.title}</h2>
+          <p style={{ fontSize: '12px', opacity: 0.5, marginTop: '2rem', letterSpacing: '0.15rem' }}>— 立ち止まり、物語を覗く —</p>
+          <button onClick={handleShowStory} style={{ background: 'none', border: 'none', cursor: 'pointer', marginTop: '2rem', color: site.theme?.accent||'#c8a86a' }}>
+            クリックして読む
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ borderBottom: '1px solid #333', paddingBottom: '1rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '12px', color: '#888', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>NO.{String(man.num).padStart(2, '0')}</div>
+              <h2 style={{ fontFamily: 'var(--serif)', fontSize: '24px', fontWeight: 500, marginTop: 0 }}>{man.title}</h2>
+            </div>
+            <div style={{ fontSize: '11px', color: '#888', border: '1px solid #333', padding: '2px 8px', borderRadius: '10px', height: 'fit-content' }}>{man.cat}</div>
+          </div>
+
+          {man.altText && (
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
+                <button onClick={() => setCurrentPerspective('main')} 
+                  style={{ background: currentPerspective === 'main' ? '#333' : 'none', border: '1px solid #333', color: currentPerspective === 'main' ? '#fff' : '#888', 
+                    padding: '4px 12px', cursor: 'pointer', fontSize: '12px' }}>
+                  私から見た彼
+                </button>
+                <button onClick={() => setCurrentPerspective('alt')} 
+                  style={{ background: currentPerspective === 'alt' ? '#333' : 'none', border: '1px solid #333', color: currentPerspective === 'alt' ? '#fff' : '#888', 
+                    padding: '4px 12px', cursor: 'pointer', fontSize: '12px' }}>
+                  彼から見た私
+                </button>
+              </div>
+              {currentPerspective === 'alt' && <div style={{ fontSize: '15px', lineHeight: 2.4, color: '#888', whiteSpace: 'pre-wrap', marginBottom: '2rem' }}>{man.altText}</div>}
+            </div>
+          )}
+
+          {currentPerspective === 'main' && (
+            <div style={{ fontSize: '15px', lineHeight: 2.6, color: '#bbb', whiteSpace: 'pre-wrap', marginBottom: '4rem' }}>{man.text}</div>
+          )}
+
+          {man.choices && (
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{ fontSize: '12px', color: '#888', letterSpacing: '0.1em', marginBottom: '1rem', textAlign: 'center' }}>あなたはどうする？</div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {man.choices.map((choice, idx) => (
+                  <button key={idx} onClick={() => alert(choice.result)}
+                    style={{ background: 'transparent', border: '1px solid #444', color: '#888', padding: '10px 20px', cursor: 'pointer', 
+                      fontSize: '13px', flex: 1, minWidth: '150px', transition: '0.3s' }}>
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={handleNextMan} style={{ background: 'transparent', border: '1px solid #444', color: '#888', padding: '12px 40px', 
+            cursor: 'pointer', fontSize: '13px', display: 'block', margin: '2rem auto', transition: '0.3s' }}>
+            街に戻り、別の男とすれ違う
+          </button>
+        </div>
+      )}
+
+      {showCollection && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(8,8,10,0.97)', zIndex: 500, 
+          overflow: 'auto', padding: '60px 40px 40px' }}>
+          <button onClick={() => setShowCollection(false)} style={{ position: 'fixed', top: '20px', right: '24px', background: 'none', 
+            border: 'none', color: '#888', fontSize: '24px', cursor: 'pointer' }}>✕</button>
+
+          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 400, letterSpacing: '0.3rem', marginBottom: '0.5rem' }}>すれ違った男たち</h2>
+            <p style={{ fontSize: '12px', color: '#888', letterSpacing: '0.2rem' }}>街で出会った記録</p>
+          </div>
+
+          <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+            {['都市', '自然', '動物', '社会', '時空'].map(cat => {
+              const menInCat = NINETY_NINE_MEN_STORIES.filter(m => m.cat === cat);
+              return (
+                <div key={cat} style={{ marginBottom: '36px' }}>
+                  <div style={{ fontSize: '11px', letterSpacing: '0.2em', color: '#888', borderBottom: '1px solid #333', paddingBottom: '8px', marginBottom: '14px' }}>
+                    {cat}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {menInCat.map(m => (
+                      <div key={m.num} style={{ padding: '5px 12px', fontSize: '12px', border: readMen[m.num] ? `1px solid ${site.theme?.accent||'#c8a86a'}` : '1px solid #333', 
+                        borderRadius: '2px', color: readMen[m.num] ? site.theme?.accent||'#c8a86a' : '#444', cursor: readMen[m.num] ? 'pointer' : 'default',
+                        transition: '0.2s' }}>
+                        {m.num}. {m.title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════ MAIN APP ═══════════════
+function App() {
+  const store = useStore();
+  const [page, setPage] = useState('home');
+  const [lightMode, setLightMode] = useState(false);
+
+  const accent = store.site.theme?.accent || '#c8a86a';
+  const bg = lightMode ? '#f5f0e8' : (store.site.theme?.bg || '#07070f');
+  const txt = lightMode ? '#1a1814' : '#e2ddd4';
+
+  if (store.loading) {
+    return <div style={{ background: bg, color: txt, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      読み込み中...
+    </div>;
+  }
+
+  return (
+    <div className="app" style={{ background: bg, color: txt }}>
+      {/* NAV */}
+      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500, height: '60px', padding: '0 40px', 
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid rgba(255,255,255,.06)`, 
+        background: lightMode ? 'rgba(245,240,232,.92)' : 'rgba(7,7,15,.9)' }}>
+        <div onClick={() => setPage('home')} style={{ cursor: 'pointer' }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 300, color: accent, letterSpacing: '.12em' }}>
+            {store.site.name}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {['home', 'hitorigoto', 'profile', '99men'].map(p => (
+            <button key={p} onClick={() => setPage(p)} 
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '10px', letterSpacing: '.26em', 
+                textTransform: 'uppercase', color: page === p ? accent : '#8c8578', padding: '6px 12px', borderRadius: '2px',
+                transition: 'all .2s', backgroundColor: page === p ? 'rgba(200,164,106,.1)' : 'transparent' }}>
+              {p === 'home' ? '作品一覧' : p === 'hitorigoto' ? 'ひとりごと' : p === 'profile' ? '著者' : '九十九人の男たち'}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={() => setLightMode(!lightMode)} 
+            style={{ background: 'none', border: `1px solid ${lightMode ? accent : 'rgba(255,255,255,.06)'}`, 
+              borderRadius: '20px', padding: '4px 14px', cursor: 'pointer', fontSize: '10px', letterSpacing: '.18em', 
+              color: lightMode ? accent : '#8c8578', transition: 'all .2s' }}>
+            {lightMode ? 'DARK' : 'LIGHT'}
+          </button>
+        </div>
+      </nav>
+
+      {/* CONTENT */}
+      <div style={{ paddingTop: '60px', minHeight: '100vh' }}>
+        {page === '99men' && <NinetyNineMen site={store.site} />}
+        {page === 'home' && <div style={{ padding: '100px 40px 60px', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '3rem', fontWeight: 300, marginBottom: '2rem', color: accent }}>淵</h1>
+          <p style={{ fontSize: '16px', lineHeight: 2, maxWidth: '500px', margin: '0 auto 3rem', opacity: 0.8 }}>
+            {store.site.catchcopy}
+          </p>
+          <p style={{ fontSize: '14px', lineHeight: 1.8, maxWidth: '600px', margin: '0 auto', opacity: 0.6, whiteSpace: 'pre-line' }}>
+            {store.site.description}
+          </p>
+        </div>}
+        {page === 'profile' && <div style={{ padding: '100px 40px 60px', maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+          <h2 style={{ fontSize: '2rem', fontWeight: 300, marginBottom: '2rem', color: accent }}>{store.author.name}</h2>
+          <p style={{ fontSize: '12px', letterSpacing: '0.08em', color: '#888', marginBottom: '2rem' }}>{store.author.nameRoman}</p>
+          <p style={{ fontSize: '14px', lineHeight: 1.8, opacity: 0.8, whiteSpace: 'pre-line' }}>{store.author.bio}</p>
+        </div>}
+        {page === 'hitorigoto' && <div style={{ padding: '100px 40px 60px', maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '2rem', fontWeight: 300, marginBottom: '2rem', textAlign: 'center' }}>ひとりごと</h2>
+          {(store.author.murmurs || []).length === 0 ? (
+            <p style={{ textAlign: 'center', opacity: 0.5 }}>まだ何も書かれていません。</p>
+          ) : (
+            store.author.murmurs.map(m => (
+              <div key={m.id} style={{ borderBottom: `1px solid rgba(255,255,255,.06)`, paddingBottom: '2rem', marginBottom: '2rem' }}>
+                <div style={{ fontSize: '11px', color: '#888', marginBottom: '1rem', letterSpacing: '0.1em' }}>{m.date}</div>
+                <div style={{ fontSize: '15px', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{m.text}</div>
+              </div>
+            ))
+          )}
+        </div>}
+      </div>
+
+      {/* FOOTER */}
+      <footer style={{ borderTop: `1px solid rgba(255,255,255,.06)`, padding: '40px 48px', display: 'flex', 
+        justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 300, color: accent, letterSpacing: '.1em' }}>
+          {store.site.name}
+        </div>
+        <div style={{ fontSize: '10px', color: '#8c8578', letterSpacing: '.18em' }}>
+          © {new Date().getFullYear()} {store.site.name} — {store.site.footerText}
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
