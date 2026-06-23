@@ -560,6 +560,71 @@ function Styles({site, lightMode}){
 }
 
 // ═══════════════ SHARED ═══════════════
+
+// 入力欄の値を即座にFirestoreへ保存→onSnapshotで戻り値が画面に
+// 反映される、という従来の仕組みでは、日本語入力（IME）の変換中に
+// 値が外側から上書きされてしまい、変換中の文字が壊れる場合があった。
+// このフックは「入力中はローカルの状態だけを更新し、入力が止まった時・
+// フォーカスが外れた時にだけ実際の保存処理(onCommit)を呼ぶ」ことで、
+// IME入力を中断させずに保存できるようにする。
+function useBufferedValue(value, onCommit, debounceMs){
+  const [local, setLocal] = useState(value);
+  const focusedRef = useRef(false);
+  const timerRef   = useRef(null);
+  const localRef   = useRef(local);
+  const dirtyRef   = useRef(false);
+  localRef.current = local;
+
+  // 外部の値（Firestoreからの反映など）は、入力中でなければ取り込む
+  useEffect(()=>{
+    if(!focusedRef.current) setLocal(value);
+  },[value]);
+
+  useEffect(()=>()=>{ if(timerRef.current) clearTimeout(timerRef.current); },[]);
+
+  const commitNow = () => {
+    if(timerRef.current){ clearTimeout(timerRef.current); timerRef.current=null; }
+    if(dirtyRef.current){ dirtyRef.current=false; onCommit(localRef.current); }
+  };
+
+  const handleChange = v => {
+    setLocal(v);
+    dirtyRef.current = true;
+    if(timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(commitNow, debounceMs);
+  };
+  const handleFocus = () => { focusedRef.current = true; };
+  const handleBlur  = () => { focusedRef.current = false; commitNow(); };
+
+  return { local, handleChange, handleFocus, handleBlur };
+}
+
+function BufferedInput({value, onCommit, debounceMs=700, ...props}){
+  const {local, handleChange, handleFocus, handleBlur} = useBufferedValue(value, onCommit, debounceMs);
+  return (
+    <input
+      {...props}
+      value={local}
+      onChange={e=>handleChange(e.target.value)}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+    />
+  );
+}
+
+function BufferedTextarea({value, onCommit, debounceMs=700, ...props}){
+  const {local, handleChange, handleFocus, handleBlur} = useBufferedValue(value, onCommit, debounceMs);
+  return (
+    <textarea
+      {...props}
+      value={local}
+      onChange={e=>handleChange(e.target.value)}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+    />
+  );
+}
+
 function ColorPicker({label,value,onChange}){
   const ref=useRef();
   return(
