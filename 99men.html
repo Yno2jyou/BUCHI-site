@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>九十九人の男たち — City Encounter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #08080a;
+            --text-p: #ddd8d0;
+            --text-s: #777;
+            --accent: #fff;
+            --amber: #c8a46a;
+            --font-serif: "Shippori Mincho", "MS PMincho", serif;
+            --sky-day: linear-gradient(180deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+            --sky-night: linear-gradient(180deg, #02020a 0%, #060612 60%, #0a0a18 100%);
+            --sky-rain: linear-gradient(180deg, #0d0d14 0%, #111118 60%, #141420 100%);
+            --city-tint: rgba(8,8,10,0.85);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-p);
+            font-family: var(--font-serif);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* =========== SKY & ATMOSPHERE =========== */
+        #sky-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0;
+            transition: background 8s ease;
+            background: var(--sky-night);
+        }
+
+        /* Stars */
+        #stars {
+            position: fixed; top: 0; left: 0; width: 100%; height: 60%;
+            z-index: 1;
+            transition: opacity 3s ease;
+        }
+
+        .star {
+            position: absolute;
+            background: #fff;
+            border-radius: 50%;
+            animation: twinkle var(--dur) infinite ease-in-out;
+        }
+        @keyframes twinkle {
+            0%, 100% { opacity: var(--min-op); }
+            50% { opacity: var(--max-op); }
+        }
+
+        /* Rain */
+        #rain-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 4s ease;
+            overflow: hidden;
+        }
+        .raindrop {
+            position: absolute;
+            top: -20px;
+            width: 1px;
+            background: linear-gradient(to bottom, transparent, rgba(180,200,220,0.35));
+            animation: fall linear infinite;
+        }
+        @keyframes fall {
+            to { transform: translateY(110vh); }
+        }
+
+        /* City container */
+        .city-container {
+            position: fixed;
+            bottom: 0; left: 0;
+            width: 100%; height: 320px;
+            z-index: 5;
+            pointer-events: none;
+            transition: opacity 1.5s ease, transform 3.0s cubic-bezier(0.25, 0.1, 0.25, 1);
+            opacity: 1;
+        }
+        .city-hidden { opacity: 0 !important; transform: translateY(50px); }
+
+        .city-silhouette {
+            position: absolute;
+            bottom: 0;
+            width: 400%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 200'%3E%3Cdefs%3E%3Cstyle%3E.w%7Bfill:%23ffcc66;opacity:0.3;%7D.b%7Bfill:%23121216;%7D%3C/style%3E%3C/defs%3E%3Crect class='b' x='0' y='120' width='40' height='80'/%3E%3Crect class='w' x='10' y='130' width='5' height='7'/%3E%3Crect class='w' x='25' y='130' width='5' height='7'/%3E%3Crect class='w' x='10' y='150' width='5' height='7'/%3E%3Crect class='w' x='25' y='150' width='5' height='7'/%3E%3Crect class='b' x='40' y='60' width='60' height='140'/%3E%3Crect class='w' x='50' y='75' width='8' height='10'/%3E%3Crect class='w' x='75' y='75' width='8' height='10'/%3E%3Crect class='w' x='50' y='95' width='8' height='10'/%3E%3Crect class='w' x='75' y='95' width='8' height='10'/%3E%3Crect class='w' x='50' y='115' width='8' height='10'/%3E%3Crect class='w' x='75' y='115' width='8' height='10'/%3E%3Crect class='b' x='100' y='100' width='50' height='100'/%3E%3Crect class='w' x='115' y='115' width='6' height='8'/%3E%3Crect class='w' x='130' y='115' width='6' height='8'/%3E%3Crect class='w' x='115' y='135' width='6' height='8'/%3E%3Crect class='w' x='130' y='135' width='6' height='8'/%3E%3Crect class='b' x='150' y='30' width='70' height='170'/%3E%3Crect class='w' x='165' y='50' width='10' height='12'/%3E%3Crect class='w' x='190' y='50' width='10' height='12'/%3E%3Crect class='w' x='165' y='75' width='10' height='12'/%3E%3Crect class='w' x='190' y='75' width='10' height='12'/%3E%3Crect class='w' x='165' y='100' width='10' height='12'/%3E%3Crect class='w' x='190' y='100' width='10' height='12'/%3E%3Crect class='b' x='220' y='80' width='40' height='120'/%3E%3Crect class='w' x='230' y='95' width='6' height='8'/%3E%3Crect class='w' x='230' y='115' width='6' height='8'/%3E%3Crect class='b' x='260' y='50' width='80' height='150'/%3E%3Crect class='w' x='275' y='70' width='12' height='15'/%3E%3Crect class='w' x='305' y='70' width='12' height='15'/%3E%3Crect class='w' x='275' y='100' width='12' height='15'/%3E%3Crect class='w' x='305' y='100' width='12' height='15'/%3E%3Crect class='b' x='340' y='110' width='60' height='90'/%3E%3Crect class='w' x='355' y='125' width='8' height='10'/%3E%3Crect class='w' x='375' y='125' width='8' height='10'/%3E%3Crect class='b' x='400' y='20' width='50' height='180'/%3E%3Crect class='w' x='415' y='40' width='10' height='12'/%3E%3Crect class='w' x='415' y='65' width='10' height='12'/%3E%3Crect class='w' x='415' y='90' width='10' height='12'/%3E%3Crect class='b' x='450' y='90' width='70' height='110'/%3E%3Crect class='w' x='465' y='105' width='12' height='10'/%3E%3Crect class='w' x='490' y='105' width='12' height='10'/%3E%3Crect class='w' x='465' y='125' width='12' height='10'/%3E%3Crect class='w' x='490' y='125' width='12' height='10'/%3E%3Crect class='b' x='520' y='40' width='40' height='160'/%3E%3Crect class='w' x='535' y='60' width='8' height='12'/%3E%3Crect class='w' x='535' y='85' width='8' height='12'/%3E%3Crect class='b' x='560' y='100' width='90' height='100'/%3E%3Crect class='w' x='575' y='115' width='10' height='10'/%3E%3Crect class='w' x='600' y='115' width='10' height='10'/%3E%3Crect class='w' x='625' y='115' width='10' height='10'/%3E%3Crect class='b' x='650' y='15' width='60' height='185'/%3E%3Crect class='w' x='665' y='35' width='12' height='15'/%3E%3Crect class='w' x='665' y='60' width='12' height='15'/%3E%3Crect class='w' x='665' y='85' width='12' height='15'/%3E%3Crect class='b' x='710' y='70' width='50' height='130'/%3E%3Crect class='w' x='725' y='85' width='8' height='10'/%3E%3Crect class='w' x='725' y='105' width='8' height='10'/%3E%3Crect class='b' x='760' y='90' width='60' height='110'/%3E%3Crect class='w' x='775' y='105' width='10' height='12'/%3E%3Crect class='w' x='795' y='105' width='10' height='12'/%3E%3Crect class='b' x='820' y='30' width='40' height='170'/%3E%3Crect class='w' x='832' y='50' width='12' height='15'/%3E%3Crect class='w' x='832' y='80' width='12' height='15'/%3E%3Crect class='b' x='860' y='85' width='70' height='115'/%3E%3Crect class='w' x='875' y='105' width='8' height='10'/%3E%3Crect class='w' x='900' y='105' width='8' height='10'/%3E%3Crect class='w' x='875' y='125' width='8' height='10'/%3E%3Crect class='w' x='900' y='125' width='8' height='10'/%3E%3Crect class='b' x='930' y='60' width='70' height='140'/%3E%3Crect class='w' x='945' y='80' width='10' height='12'/%3E%3Crect class='w' x='970' y='80' width='10' height='12'/%3E%3Crect class='w' x='945' y='105' width='10' height='12'/%3E%3Crect class='w' x='970' y='105' width='10' height='12'/%3E%3C/svg%3E");
+            background-repeat: repeat-x;
+            background-size: 25% 100%;
+            animation: cityDrift 120s linear infinite;
+        }
+        @keyframes cityDrift {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-25%); }
+        }
+
+        /* City fog / ground glow */
+        .city-fog {
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 100%; height: 80px;
+            background: linear-gradient(to top, rgba(8,8,10,0.9), transparent);
+        }
+
+        /* =========== MAIN CONTAINER =========== */
+        .container {
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Encounter view */
+        #encounter-view {
+            transition: opacity 0.8s ease;
+            cursor: pointer;
+        }
+        .encounter-label {
+            font-size: 0.75rem;
+            letter-spacing: 0.5rem;
+            color: var(--text-s);
+            margin-bottom: 2rem;
+            display: block;
+            animation: pulse 4s infinite;
+        }
+        .man-title {
+            font-size: 2.2rem;
+            font-weight: 500;
+            letter-spacing: 0.3rem;
+            text-shadow: 0 0 20px rgba(200,164,106,0.08);
+            margin-bottom: 1rem;
+        }
+
+        /* =========== STORY VIEW =========== */
+        #story-view {
+            display: none;
+            text-align: left;
+            opacity: 0;
+            transition: opacity 1s ease;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 40px;
+            background: rgba(8,8,10,0.97);
+            border-radius: 2px;
+            border: 1px solid #1a1a1a;
+        }
+        .story-header {
+            border-bottom: 1px solid #1e1e1e;
+            padding-bottom: 1rem;
+            margin-bottom: 2.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .story-num { font-family: sans-serif; font-size: 0.7rem; color: var(--text-s); letter-spacing: 0.1rem; }
+        .story-cat { font-size: 0.7rem; color: #555; border: 1px solid #222; padding: 2px 8px; border-radius: 10px; }
+        .story-content {
+            font-size: 1.05rem;
+            line-height: 2.6;
+            white-space: pre-wrap;
+            margin-bottom: 4rem;
+            color: #bbb;
+            text-align: justify;
+        }
+
+        /* =========== CHOICE SYSTEM =========== */
+        #choice-area {
+            margin-top: 0;
+            margin-bottom: 2.5rem;
+            display: none;
+        }
+        .choice-prompt {
+            font-size: 0.72rem;
+            letter-spacing: 0.2rem;
+            color: #555;
+            margin-bottom: 1.2rem;
+            text-align: center;
+        }
+        .choice-btns {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .choice-btn {
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: #888;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: var(--font-serif);
+            font-size: 0.82rem;
+            letter-spacing: 0.05rem;
+            line-height: 1.6;
+            text-align: left;
+            transition: 0.3s;
+            flex: 1;
+            min-width: 150px;
+        }
+        .choice-btn:hover {
+            border-color: var(--amber);
+            color: var(--amber);
+            background: rgba(200,164,106,0.04);
+        }
+
+        /* Branch result */
+        #branch-result {
+            display: none;
+            font-size: 0.92rem;
+            line-height: 2.4;
+            color: #999;
+            padding: 20px 24px;
+            border-left: 1px solid var(--amber);
+            margin-bottom: 2rem;
+            font-style: italic;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+
+        /* Perspective toggle */
+        #perspective-area {
+            display: none;
+            margin-bottom: 2rem;
+        }
+        .perspective-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 1rem;
+        }
+        .persp-tab {
+            background: transparent;
+            border: 1px solid #222;
+            color: #555;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-family: var(--font-serif);
+            font-size: 0.7rem;
+            letter-spacing: 0.1rem;
+            transition: 0.2s;
+        }
+        .persp-tab.active {
+            border-color: #444;
+            color: var(--text-p);
+        }
+        #alt-text {
+            font-size: 0.9rem;
+            line-height: 2.4;
+            color: #888;
+            white-space: pre-wrap;
+            text-align: justify;
+            padding: 16px 0;
+            border-top: 1px solid #1a1a1a;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .next-btn {
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: var(--text-s);
+            padding: 12px 40px;
+            cursor: pointer;
+            font-family: var(--font-serif);
+            font-size: 0.85rem;
+            transition: 0.4s;
+            display: block;
+            margin: 0 auto;
+            letter-spacing: 0.1rem;
+        }
+        .next-btn:hover { border-color: #666; color: var(--accent); }
+
+        /* =========== BLACKOUT =========== */
+        #blackout {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 2000; display: none; opacity: 0;
+            transition: opacity 4s ease; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center; color: #fff;
+        }
+
+        /* =========== NEW ENCOUNTER BADGE =========== */
+        #new-badge {
+            display: none;
+            position: absolute;
+            top: -10px; right: -10px;
+            background: var(--amber);
+            color: #000;
+            font-size: 0.55rem;
+            padding: 2px 6px;
+            letter-spacing: 0.1rem;
+            font-weight: 600;
+        }
+
+        @keyframes pulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.5; } }
+        #story-view::-webkit-scrollbar { width: 2px; }
+        #story-view::-webkit-scrollbar-thumb { background: #2a2a2a; }
+
+        /* =========== 1. TYPING EFFECT =========== */
+        .story-line {
+            display: block;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+        .story-line.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* =========== 3. MOUSE STALKER =========== */
+        #stalker-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 6;
+            pointer-events: none;
+        }
+
+        /* =========== 6. ZOOM TRANSITION =========== */
+        #zoom-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 50;
+            pointer-events: none;
+            background: radial-gradient(circle at var(--ox,50%) var(--oy,50%),
+                transparent 0%, transparent 30%, rgba(8,8,10,0.95) 100%);
+            opacity: 0;
+            transition: opacity 0.6s ease;
+            transform: scale(1);
+        }
+        #zoom-overlay.zooming {
+            opacity: 1;
+        }
+
+        /* =========== 7. MEMORY LOG (collection chip tooltip) =========== */
+        .chip-meta {
+            font-size: 0.58rem;
+            color: #555;
+            display: block;
+            margin-top: 2px;
+            letter-spacing: 0.05rem;
+        }
+
+        /* =========== COLLECTION BUTTON =========== */
+        #collection-btn {
+            position: fixed;
+            top: 24px; left: 24px;
+            z-index: 100;
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            color: var(--text-s);
+            padding: 6px 14px;
+            cursor: pointer;
+            font-family: var(--font-serif);
+            font-size: 0.7rem;
+            letter-spacing: 0.15rem;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #collection-btn:hover { border-color: #555; color: var(--text-p); }
+        #collection-count {
+            background: var(--amber);
+            color: #000;
+            font-size: 0.6rem;
+            padding: 1px 5px;
+            border-radius: 8px;
+            font-weight: 600;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        /* =========== COLLECTION PANEL =========== */
+        #collection-panel {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 500;
+            background: rgba(8,8,10,0.97);
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            overflow-y: auto;
+            padding: 60px 40px 40px;
+        }
+        #collection-panel.visible {
+            display: block;
+        }
+        #collection-panel.shown {
+            opacity: 1;
+        }
+
+        .collection-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .collection-header h2 {
+            font-size: 1.4rem;
+            font-weight: 400;
+            letter-spacing: 0.4rem;
+            margin-bottom: 0.5rem;
+        }
+        .collection-header p {
+            font-size: 0.7rem;
+            color: var(--text-s);
+            letter-spacing: 0.2rem;
+        }
+
+        .progress-bar-wrap {
+            max-width: 400px;
+            margin: 20px auto 40px;
+        }
+        .progress-bar-track {
+            height: 1px;
+            background: #222;
+            position: relative;
+        }
+        .progress-bar-fill {
+            position: absolute;
+            top: 0; left: 0;
+            height: 100%;
+            background: var(--amber);
+            transition: width 1s ease;
+        }
+        .progress-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 0.65rem;
+            color: var(--text-s);
+        }
+
+        .cat-section {
+            margin-bottom: 36px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .cat-label {
+            font-size: 0.65rem;
+            letter-spacing: 0.3rem;
+            color: var(--text-s);
+            border-bottom: 1px solid #1e1e1e;
+            padding-bottom: 8px;
+            margin-bottom: 14px;
+        }
+        .man-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .man-chip {
+            padding: 5px 12px;
+            font-size: 0.72rem;
+            letter-spacing: 0.05rem;
+            border: 1px solid #1e1e1e;
+            border-radius: 2px;
+            color: #444;
+            position: relative;
+            transition: 0.2s;
+        }
+        .man-chip.read {
+            border-color: #3a3028;
+            color: var(--amber);
+            cursor: pointer;
+        }
+        .man-chip.read:hover {
+            background: rgba(200,164,106,0.08);
+        }
+        .man-chip.unread::before {
+            content: '？';
+            color: #333;
+        }
+
+        .close-panel-btn {
+            position: fixed;
+            top: 20px; right: 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-s);
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 501;
+            padding: 8px;
+            transition: color 0.2s;
+        }
+        .close-panel-btn:hover { color: var(--text-p); }
+
+        /* =========== 9. RARE EVENT OVERLAY =========== */
+        #rare-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1500;
+            display: none;
+            pointer-events: none;
+            background: transparent;
+        }
+        #rare-message {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.72rem;
+            letter-spacing: 0.3rem;
+            color: rgba(200,164,106,0.0);
+            text-align: center;
+            line-height: 2.6;
+            transition: color 3s ease;
+            white-space: nowrap;
+        }
+        #rare-message.lit { color: rgba(200,164,106,0.6); }
+    </style>
+</head>
+<body>
+
+<!-- Atmosphere layers -->
+<div id="sky-layer"></div>
+<div id="stars"></div>
+<div id="rain-layer"></div>
+
+<!-- Feature: mouse stalker canvas -->
+<canvas id="stalker-canvas"></canvas>
+
+<!-- Feature: zoom transition overlay -->
+<div id="zoom-overlay"></div>
+
+<!-- Feature: rare event overlay -->
+<div id="rare-overlay"><div id="rare-message"></div></div>
+
+<div class="city-container" id="city-bg">
+    <div class="city-silhouette" id="city-sil"></div>
+    <div class="city-fog"></div>
+</div>
+
+<!-- UI chrome -->
+<button id="collection-btn" onclick="openCollection()">
+    <span>既読一覧</span>
+    <span id="collection-count">0</span>
+    <span style="color:#333">/99</span>
+</button>
+
+<!-- Main interaction area -->
+<div class="container">
+    <div id="encounter-view" onclick="showStory()">
+        <span class="encounter-label">すれ違った男</span>
+        <div style="position:relative;display:inline-block;">
+            <h1 class="man-title" id="display-title">...</h1>
+            <div id="new-badge">NEW</div>
+        </div>
+        <p style="color: var(--text-s); font-size: 0.75rem; margin-top: 2rem; opacity: 0.5; letter-spacing:0.15rem;">— 立ち止まり、物語を覗く —</p>
+    </div>
+
+    <div id="story-view">
+        <div class="story-header">
+            <div>
+                <span class="story-num" id="story-num">NO.00</span>
+                <h2 id="story-title" style="margin-top:0.5rem; font-weight: 500;"></h2>
+            </div>
+            <span class="story-cat" id="story-cat"></span>
+        </div>
+
+        <!-- Perspective tabs (for select stories) -->
+        <div id="perspective-area">
+            <div class="perspective-tabs">
+                <button class="persp-tab active" onclick="switchPerspective('main')">私から見た彼</button>
+                <button class="persp-tab" onclick="switchPerspective('alt')">彼から見た私</button>
+            </div>
+            <div id="alt-text"></div>
+        </div>
+
+        <div class="story-content" id="story-text"></div>
+
+        <!-- Choice system -->
+        <div id="choice-area">
+            <div class="choice-prompt">あなたはどうする？</div>
+            <div class="choice-btns" id="choice-btns"></div>
+        </div>
+
+        <div id="branch-result"></div>
+
+        <button class="next-btn" id="next-btn" onclick="nextMan()">街に戻り、別の男とすれ違う</button>
+    </div>
+</div>
+
+<div id="blackout">
+    <div style="margin-bottom: 2rem; opacity: 0.3; letter-spacing: 0.6rem; font-size: 0.8rem;">NO.???</div>
+    <h1 style="font-size: 1.8rem; font-weight: 500; margin-bottom: 3rem; letter-spacing: 0.2rem;">これは、あなたの物語</h1>
+    <div style="line-height: 2.8; color: #888; font-size: 1rem; max-width: 500px; padding: 0 25px;">
+        九十九人の男たちの記録はここで途絶えている。<br><br>
+        ここから先は、まだインクの乗っていない白紙の頁。<br>
+        街の喧騒に戻り、呼吸を整え、<br>
+        歩き出すあなたの足跡こそが、<br>
+        最後の一篇となる。
+    </div>
+    <button class="next-btn" style="margin-top: 4rem;" onclick="location.reload()">最初から歩き直す</button>
+</div>
+
+<!-- Collection panel -->
+<div id="collection-panel">
+    <button class="close-panel-btn" onclick="closeCollection()">✕</button>
+    <div class="collection-header">
+        <h2>すれ違った男たち</h2>
+        <p>街で出会った記録</p>
+    </div>
+    <div class="progress-bar-wrap">
+        <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-labels">
+            <span id="progress-count">0 人と出会った</span>
+            <span>残り <span id="progress-remain">99</span> 人</span>
+        </div>
+    </div>
+    <div id="collection-body"></div>
+</div>
+
+<script>
+// ====================================================
+// STORIES DATA (full 99)
+// ====================================================
+const stories = [
+  {num:1, cat:"都市", title:"信号待ち男", text:"彼は毎朝、七時十五分に交差点へ現れる。\n\n青信号が点灯しても、彼は渡らない。足を一歩も踏み出さず、ただ赤に変わるのを待つ。通行人は初め怪訝な顔をするが、やがて彼の存在に慣れ、誰も気にしなくなった。\n\n彼が最後に渡ったのは、三年前の十月だった。あの日、向かいのビルで一人の老人が死んだ。心筋梗塞だったと翌日の地方紙は伝えた。彼だけが知っていた。自分が渡るたびに、街の誰かが逝くことを。\n\n今日も青が灯る。彼の足は動かない。赤になると、ほんの少しだけ、肩の力が抜けた。\n\n「まだ、いい」と彼は呟く。誰でもない誰かに向けて。横断歩道の白いラインが、午後の日差しに灼けている。",
+   choices:[
+     {label:"「渡りましょう」と手を引いた", result:"彼の手は冷たかった。一歩踏み出した瞬間、遠くで救急車のサイレンが鳴った。彼は立ち止まり、私を見た。「大丈夫です」と彼は言った。「今日の分は、もう決まっていたから」"},
+     {label:"隣で一緒に待つことにした", result:"三十分、私たちは何も言わずに並んで立った。赤が点灯するたびに、彼の肩が少し下がった。やがて彼は「ありがとうございます」と言った。理由はわからなかった。でも十分だった。"}
+   ]},
+  {num:2, cat:"都市", title:"電柱男", text:"彼を見かけるようになったのは、町内に防犯カメラが増えた頃だった。\n\n四丁目と五丁目の境界にある電柱のそば、彼は毎晩直立している。雨の夜も、霜の朝も。電線が風に揺れるたび、彼は目を細め、なにかに耳を澄ます。\n\n隣の山田さんが不倫をしていることを、彼は知っている。三軒先の田中家で夫婦喧嘩があった夜も、彼の表情は微かに曇った。街中の盗聴器のようなものだと、私はひそかに思っている。\n\n一度だけ話しかけたことがある。「何を聞いているんですか」。彼は電線を見上げたまま答えた。\n\n「街が、泣いているんです」\n\nその夜、隣の家の電球が一斉に切れた。"},
+  {num:3, cat:"都市", title:"公衆電話男", text:"駅前に一台だけ残った公衆電話のそばで、彼はいつも受話器を握っている。\n\n繋がらない番号にかけ続けているのだと、後に知った。押すたびに違う数字の羅列。意味のないランダムな配列。それでも彼は耳を押し当て、じっと待つ。\n\n一月に一度だけ、繋がることがあるという。「過去」に通じた時は、誰かの懐かしい声が聞こえる。「死後」に通じた時は、無音の中にかすかな呼吸音がするだけだと彼は言った。\n\n「どちらが怖いですか」と訊いた。\n\n「過去です」と彼は答えた。「死者は何も責めない。でも、昔の自分の声は、今の私をずっと見ている気がして」\n\n今日も彼はかけている。繋がらない番号を。",
+   altText:"彼女が電話を覗いてくる。妙に真剣な顔で。「どちらが怖いですか」と彼女は訊く。\n\n私は答えながら、気づいていた。本当はこの質問を、誰かにずっとしてほしかったのだと。\n\n電話は今日も繋がらない。でも、隣に人がいる。それだけで、少し違う音がする気がした。"},
+  {num:12, cat:"都市", title:"ゴミ箱男", text:"彼は毎朝、街を歩く。\n\nそれだけに見える。昼も夜も、何かを拾っているわけでもない。でも、彼が通り過ぎた後、なぜかみんな少しだけ軽くなる。\n\n長年引きずっていた後悔が、翌朝には薄れている。誰かへの怒りが、気づけば色を失っている。恋人を忘れられなかった男が、彼とすれ違った夕方から急に前を向けるようになった。\n\n「何を食べているんですか」と訊いた。\n\n彼は少し考えてから言った。「不要になったものです。ずっと持っていても腐るものを、頂いているだけです」\n\n「苦くないですか」\n\n「慣れました」と彼は言った。「でも、たまに誰かの初恋が混じっていると、甘いんです。捨てたくないのに捨てた感情は、一番甘い」\n\n彼は次の角を曲がって消えた。",
+   choices:[
+     {label:"「私の後悔も、持っていきますか」と訊いた", result:"彼は立ち止まり、私の顔をじっと見た。「それは、まだ腐っていません」と彼は言った。「後悔している間は、まだあなたにとって大切なものです。捨てるのは、もう少し後にしましょう」"},
+     {label:"黙って見送った", result:"彼の背中が遠ざかるにつれ、胸の奥にあった何かが、少し溶けた。何を失ったのかわかりません。でも、歩くのが少し軽くなりました。"}
+   ]},
+  {num:95, cat:"時空", title:"透明男", text:"彼は、誰にも気づかれない。\n\n目の前にいても、声をかけても、誰も彼を認識しない。彼は、世界の景色の一部として、完全に同化していた。彼が透明になれるのは、彼自身が「自分はいない」と信じ込んでいるからだった。\n\n「私はあなたが見えるよ」と声をかけた。\n\n彼は驚いた顔で私を見た。その瞬間、彼の体が輪郭を持ち、色が付き始めた。「見つけてくれて、ありがとう」と彼は泣いた。「誰かに見られることで、初めて私は人間になれた。見られない時間は、死んでいるのと変わらなかった」\n\n彼は、誰かの視線を浴びることで、ようやくこの世界に繋ぎ止められていた。彼は、孤独という名の透明な檻から、私の言葉で救い出された。",
+   choices:[
+     {label:"「ずっと見ていたよ」と言った", result:"彼の目から涙がこぼれた。「嘘です」と彼は言った。でも、嬉しそうだった。「嘘でもいい」と彼は続けた。「嘘でもいいから、そう言ってほしかった。ずっと」。彼の輪郭が、少し濃くなった気がした。"},
+     {label:"「他に見えている人は？」と訊いた", result:"「いません」と彼は即答した。「だから、あなたが怖い」。彼は一歩下がった。「見られることに、慣れていないんです。消えたくなる」。「消えないで」と私は言った。彼は黙って、そこに立ち続けた。"}
+   ]},
+];
+
+let currentManIndex = 0;
+let readMen = JSON.parse(localStorage.getItem('read99Men')) || {};
+let currentPerspective = 'main';
+
+function getCategories() {
+  const cats = [...new Set(stories.map(s => s.cat))];
+  return cats.sort();
+}
+
+function showStory() {
+  const man = stories[currentManIndex];
+  document.getElementById('encounter-view').style.display = 'none';
+  document.getElementById('story-view').style.display = 'block';
+  setTimeout(() => {
+    document.getElementById('story-view').style.opacity = '1';
+  }, 50);
+
+  document.getElementById('story-num').textContent = `NO.${String(man.num).padStart(2, '0')}`;
+  document.getElementById('story-title').textContent = man.title;
+  document.getElementById('story-cat').textContent = man.cat;
+  document.getElementById('story-text').textContent = man.text;
+
+  if (man.altText) {
+    document.getElementById('perspective-area').style.display = 'block';
+    document.getElementById('alt-text').textContent = man.altText;
+  } else {
+    document.getElementById('perspective-area').style.display = 'none';
+  }
+
+  if (man.choices) {
+    document.getElementById('choice-area').style.display = 'block';
+    const choiceContainer = document.getElementById('choice-btns');
+    choiceContainer.innerHTML = '';
+    man.choices.forEach((choice, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'choice-btn';
+      btn.textContent = choice.label;
+      btn.onclick = () => selectChoice(idx);
+      choiceContainer.appendChild(btn);
+    });
+  } else {
+    document.getElementById('choice-area').style.display = 'none';
+  }
+
+  readMen[man.num] = true;
+  localStorage.setItem('read99Men', JSON.stringify(readMen));
+  updateCollectionUI();
+}
+
+function selectChoice(idx) {
+  const man = stories[currentManIndex];
+  if (man.choices && man.choices[idx]) {
+    document.getElementById('choice-area').style.display = 'none';
+    const result = document.getElementById('branch-result');
+    result.textContent = man.choices[idx].result;
+    result.style.display = 'block';
+    setTimeout(() => { result.style.opacity = '1'; }, 50);
+  }
+}
+
+function switchPerspective(persp) {
+  currentPerspective = persp;
+  const tabs = document.querySelectorAll('.persp-tab');
+  tabs.forEach((tab, idx) => {
+    tab.classList.toggle('active', (idx === 0 && persp === 'main') || (idx === 1 && persp === 'alt'));
+  });
+  const altText = document.getElementById('alt-text');
+  if (persp === 'alt') {
+    altText.style.opacity = '1';
+  } else {
+    altText.style.opacity = '0';
+  }
+}
+
+function nextMan() {
+  currentManIndex = Math.floor(Math.random() * stories.length);
+  const man = stories[currentManIndex];
+  
+  document.getElementById('story-view').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('story-view').style.display = 'none';
+    document.getElementById('story-text').textContent = '';
+    document.getElementById('choice-area').innerHTML = '';
+    document.getElementById('branch-result').style.opacity = '0';
+    document.getElementById('branch-result').style.display = 'none';
+    document.getElementById('display-title').textContent = man.title;
+    document.getElementById('encounter-view').style.display = 'block';
+    currentPerspective = 'main';
+  }, 500);
+
+  if (Object.keys(readMen).length === 99) {
+    document.getElementById('blackout').style.display = 'flex';
+    setTimeout(() => {
+      document.getElementById('blackout').style.opacity = '1';
+    }, 500);
+  }
+}
+
+function openCollection() {
+  const panel = document.getElementById('collection-panel');
+  panel.classList.add('visible');
+  setTimeout(() => panel.classList.add('shown'), 50);
+  updateCollectionUI();
+}
+
+function closeCollection() {
+  const panel = document.getElementById('collection-panel');
+  panel.classList.remove('shown');
+  setTimeout(() => panel.classList.remove('visible'), 500);
+}
+
+function updateCollectionUI() {
+  const count = Object.keys(readMen).length;
+  document.getElementById('collection-count').textContent = count;
+  document.getElementById('progress-remain').textContent = 99 - count;
+  document.getElementById('progress-count').textContent = `${count} 人と出会った`;
+  document.getElementById('progress-fill').style.width = (count / 99 * 100) + '%';
+
+  const body = document.getElementById('collection-body');
+  body.innerHTML = '';
+  const cats = getCategories();
+  
+  cats.forEach(cat => {
+    const manInCat = stories.filter(s => s.cat === cat);
+    if (manInCat.length === 0) return;
+
+    const section = document.createElement('div');
+    section.className = 'cat-section';
+    
+    const label = document.createElement('div');
+    label.className = 'cat-label';
+    label.textContent = cat;
+    section.appendChild(label);
+
+    const grid = document.createElement('div');
+    grid.className = 'man-grid';
+    
+    manInCat.forEach(man => {
+      const chip = document.createElement('div');
+      chip.className = readMen[man.num] ? 'man-chip read' : 'man-chip unread';
+      chip.textContent = `${man.num}. ${man.title}`;
+      if (readMen[man.num]) {
+        chip.onclick = () => {
+          currentManIndex = stories.findIndex(m => m.num === man.num);
+          showStory();
+        };
+      }
+      grid.appendChild(chip);
+    });
+    
+    section.appendChild(grid);
+    body.appendChild(section);
+  });
+}
+
+// Initialize
+document.getElementById('display-title').textContent = stories[currentManIndex].title;
+updateCollectionUI();
+</script>
+</body>
+</html>
