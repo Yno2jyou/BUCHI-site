@@ -1395,12 +1395,12 @@ function AdminPanel({store,onClose}){
           <div className="fadein">
             <div className="admin-title">サイト設定</div>
             <div className="form-row">
-              <div className="form-group"><label className="form-label">サイト名</label><input className="form-input" value={site.name} onChange={e=>setSite(s=>({...s,name:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">ローマ字</label><input className="form-input" value={site.nameRoman} onChange={e=>setSite(s=>({...s,nameRoman:e.target.value}))}/></div>
+              <div className="form-group"><label className="form-label">サイト名</label><BufferedInput className="form-input" value={site.name} onCommit={v=>setSite(s=>({...s,name:v}))}/></div>
+              <div className="form-group"><label className="form-label">ローマ字</label><BufferedInput className="form-input" value={site.nameRoman} onCommit={v=>setSite(s=>({...s,nameRoman:v}))}/></div>
             </div>
-            <div className="form-group"><label className="form-label">キャッチコピー（「、」で折り返し）</label><input className="form-input" value={site.catchcopy} onChange={e=>setSite(s=>({...s,catchcopy:e.target.value}))}/></div>
-            <div className="form-group"><label className="form-label">サブコピー</label><textarea className="form-textarea" value={site.description} onChange={e=>setSite(s=>({...s,description:e.target.value}))} rows={4}/></div>
-            <div className="form-group"><label className="form-label">フッターテキスト</label><input className="form-input" value={site.footerText||""} onChange={e=>setSite(s=>({...s,footerText:e.target.value}))}/></div>
+            <div className="form-group"><label className="form-label">キャッチコピー（「、」で折り返し）</label><BufferedInput className="form-input" value={site.catchcopy} onCommit={v=>setSite(s=>({...s,catchcopy:v}))}/></div>
+            <div className="form-group"><label className="form-label">サブコピー</label><BufferedTextarea className="form-textarea" value={site.description} onCommit={v=>setSite(s=>({...s,description:v}))} rows={4}/></div>
+            <div className="form-group"><label className="form-label">フッターテキスト</label><BufferedInput className="form-input" value={site.footerText||""} onCommit={v=>setSite(s=>({...s,footerText:v}))}/></div>
             <button className="btn btn-primary" onClick={()=>flash()}>保存する</button><span style={{marginLeft:12,fontSize:12,color:"var(--accent)"}}>{saving?"⌛ 保存中…":saved?"✓ 保存しました":""}</span>
           </div>
         )}
@@ -1425,12 +1425,12 @@ function AdminPanel({store,onClose}){
               </div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label className="form-label">著者名</label><input className="form-input" value={author.name} onChange={e=>setAuthor(a=>({...a,name:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">ローマ字</label><input className="form-input" value={author.nameRoman} onChange={e=>setAuthor(a=>({...a,nameRoman:e.target.value}))}/></div>
+              <div className="form-group"><label className="form-label">著者名</label><BufferedInput className="form-input" value={author.name} onCommit={v=>setAuthor(a=>({...a,name:v}))}/></div>
+              <div className="form-group"><label className="form-label">ローマ字</label><BufferedInput className="form-input" value={author.nameRoman} onCommit={v=>setAuthor(a=>({...a,nameRoman:v}))}/></div>
             </div>
-            <div className="form-group"><label className="form-label">創作開始年</label><input className="form-input" value={author.since} onChange={e=>setAuthor(a=>({...a,since:e.target.value}))} style={{maxWidth:160}}/></div>
-            <div className="form-group"><label className="form-label">プロフィール文</label><textarea className="form-textarea" value={author.bio} onChange={e=>setAuthor(a=>({...a,bio:e.target.value}))} rows={6}/></div>
-            <div className="form-group"><label className="form-label">影響を受けた作品（カンマ区切り）</label><input className="form-input" value={author.influences} onChange={e=>setAuthor(a=>({...a,influences:e.target.value}))}/></div>
+            <div className="form-group"><label className="form-label">創作開始年</label><BufferedInput className="form-input" value={author.since} onCommit={v=>setAuthor(a=>({...a,since:v}))} style={{maxWidth:160}}/></div>
+            <div className="form-group"><label className="form-label">プロフィール文</label><BufferedTextarea className="form-textarea" value={author.bio} onCommit={v=>setAuthor(a=>({...a,bio:v}))} rows={6}/></div>
+            <div className="form-group"><label className="form-label">影響を受けた作品（カンマ区切り）</label><BufferedInput className="form-input" value={author.influences} onCommit={v=>setAuthor(a=>({...a,influences:v}))}/></div>
             <button className="btn btn-primary" onClick={()=>flash()}>保存する</button><span style={{marginLeft:12,fontSize:12,color:"var(--accent)"}}>{saving?"⌛ 保存中…":saved?"✓ 保存しました":""}</span>
           </div>
         )}
@@ -1632,19 +1632,19 @@ function AdminPanel({store,onClose}){
             </div>
             <ColorPicker label="アクセントドット" value={eNov.accent} onChange={v=>updateNovel(eNov.id,{accent:v})}/>
             <div className="form-row">
-              <div className="form-group"><label className="form-label">タイトル</label><input className="form-input" value={eNov.title} onChange={e=>updateNovel(eNov.id,{title:e.target.value})}/></div>
-              <div className="form-group"><label className="form-label">サブタイトル</label><input className="form-input" value={eNov.subtitle} onChange={e=>updateNovel(eNov.id,{subtitle:e.target.value})}/></div>
+              <div className="form-group"><label className="form-label">タイトル</label><BufferedInput key={eNov.id+":title"} className="form-input" value={eNov.title} onCommit={v=>updateNovel(eNov.id,{title:v})}/></div>
+              <div className="form-group"><label className="form-label">サブタイトル</label><BufferedInput key={eNov.id+":subtitle"} className="form-input" value={eNov.subtitle} onCommit={v=>updateNovel(eNov.id,{subtitle:v})}/></div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label className="form-label">著者名</label><input className="form-input" value={eNov.author} onChange={e=>updateNovel(eNov.id,{author:e.target.value})}/></div>
-              <div className="form-group"><label className="form-label">ジャンル</label><input className="form-input" value={eNov.genre} onChange={e=>updateNovel(eNov.id,{genre:e.target.value})}/></div>
+              <div className="form-group"><label className="form-label">著者名</label><BufferedInput key={eNov.id+":author"} className="form-input" value={eNov.author} onCommit={v=>updateNovel(eNov.id,{author:v})}/></div>
+              <div className="form-group"><label className="form-label">ジャンル</label><BufferedInput key={eNov.id+":genre"} className="form-input" value={eNov.genre} onCommit={v=>updateNovel(eNov.id,{genre:v})}/></div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label className="form-label">文字数</label><input className="form-input" value={eNov.wordCount} onChange={e=>updateNovel(eNov.id,{wordCount:e.target.value})} placeholder="42,000字"/></div>
-              <div className="form-group"><label className="form-label">更新日（YYYY-MM-DD）</label><input className="form-input" value={eNov.updated} onChange={e=>updateNovel(eNov.id,{updated:e.target.value})} placeholder="2025-12-01"/></div>
+              <div className="form-group"><label className="form-label">文字数</label><BufferedInput key={eNov.id+":wordCount"} className="form-input" value={eNov.wordCount} onCommit={v=>updateNovel(eNov.id,{wordCount:v})} placeholder="42,000字"/></div>
+              <div className="form-group"><label className="form-label">更新日（YYYY-MM-DD）</label><BufferedInput key={eNov.id+":updated"} className="form-input" value={eNov.updated} onCommit={v=>updateNovel(eNov.id,{updated:v})} placeholder="2025-12-01"/></div>
             </div>
-            <div className="form-group"><label className="form-label">タグ（カンマ区切り）</label><input className="form-input" value={(eNov.tags||[]).join(", ")} onChange={e=>updateNovel(eNov.id,{tags:e.target.value.split(",").map(t=>t.trim()).filter(Boolean)})}/></div>
-            <div className="form-group"><label className="form-label">あらすじ</label><textarea className="form-textarea" value={eNov.description} onChange={e=>updateNovel(eNov.id,{description:e.target.value})} rows={5}/></div>
+            <div className="form-group"><label className="form-label">タグ（カンマ区切り）</label><BufferedInput key={eNov.id+":tags"} className="form-input" value={(eNov.tags||[]).join(", ")} onCommit={v=>updateNovel(eNov.id,{tags:v.split(",").map(t=>t.trim()).filter(Boolean)})}/></div>
+            <div className="form-group"><label className="form-label">あらすじ</label><BufferedTextarea key={eNov.id+":description"} className="form-textarea" value={eNov.description} onCommit={v=>updateNovel(eNov.id,{description:v})} rows={5}/></div>
             <div style={{marginTop:32,paddingTop:24,borderTop:"1px solid var(--border)"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                 <span className="form-label" style={{margin:0}}>章一覧 ({(eNov.chapters||[]).length}章)</span>
@@ -1681,10 +1681,10 @@ function AdminPanel({store,onClose}){
                 <button className="back-link" onClick={()=>setSec("novel_edit")}>← {nov.title}</button>
                 <div className="admin-title" style={{margin:0}}>章を編集</div>
               </div>
-              <div className="form-group"><label className="form-label">章タイトル</label><input className="form-input" value={ch.title} onChange={e=>updateChapter(nov.id,ch.id,{title:e.target.value})}/></div>
+              <div className="form-group"><label className="form-label">章タイトル</label><BufferedInput key={ch.id+":title"} className="form-input" value={ch.title} onCommit={v=>updateChapter(nov.id,ch.id,{title:v})}/></div>
               <div className="form-group">
                 <label className="form-label">本文</label>
-                <textarea className="form-textarea" value={ch.content} onChange={e=>updateChapter(nov.id,ch.id,{content:e.target.value})} rows={24} style={{fontFamily:"'Noto Serif JP',serif",fontSize:14,lineHeight:2}}/>
+                <BufferedTextarea key={ch.id+":content"} className="form-textarea" value={ch.content} onCommit={v=>updateChapter(nov.id,ch.id,{content:v})} rows={24} style={{fontFamily:"'Noto Serif JP',serif",fontSize:14,lineHeight:2}}/>
                 <div className="form-hint">段落の区切りは空行（Enterキー2回）</div>
               </div>
               <div style={{display:"flex",gap:10}}>
