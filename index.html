@@ -483,6 +483,20 @@ function Styles({site, lightMode}){
     .wc-stat{font-family:var(--serif);font-size:11px;color:var(--txt3);letter-spacing:.1em;margin-left:4px}
     .wc-stat b{color:var(--accent);font-weight:400}
     .mobile-back-btn{display:none}
+    /* IMAGE CROP MODAL */
+    .crop-modal{width:100%;max-width:420px}
+    .crop-stage{position:relative;width:100%;aspect-ratio:1/1;background:#0a0a0a;border-radius:6px;overflow:hidden;cursor:grab;touch-action:none;margin-bottom:20px;border:1px solid var(--border-hi)}
+    .crop-stage.dragging{cursor:grabbing}
+    .crop-stage img{position:absolute;top:0;left:0;max-width:none;max-height:none;user-select:none;-webkit-user-drag:none;pointer-events:none}
+    .crop-mask{position:absolute;inset:0;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.55);border-radius:50%}
+    .crop-controls{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+    .crop-zoom-label{font-size:10px;letter-spacing:.18em;color:var(--txt3);text-transform:uppercase;flex-shrink:0;width:54px}
+    .crop-zoom-slider{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:var(--border-hi);border-radius:2px;outline:none;cursor:pointer}
+    .crop-zoom-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 0 3px var(--accent-dim)}
+    .crop-zoom-slider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;box-shadow:0 0 0 3px var(--accent-dim)}
+    .crop-hint{font-size:11px;color:var(--txt3);text-align:center;margin-top:4px;letter-spacing:.04em}
+    .crop-reset-btn{background:none;border:none;color:var(--txt3);font-size:11px;letter-spacing:.1em;cursor:pointer;text-decoration:underline;padding:0;flex-shrink:0}
+    .crop-reset-btn:hover{color:var(--accent)}
     /* AUTH MODAL TABS */
     .auth-tab-bar{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border)}
     .auth-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:9px 0;cursor:pointer;font-family:var(--body);font-size:12px;letter-spacing:.14em;color:var(--txt3);transition:all .2s}
@@ -577,6 +591,163 @@ function MessageForm({target,targetLabel,onSend}){
       <div className="form-group"><label className="form-label">お名前（任意）</label><input className="form-input" value={name} onChange={e=>setName(e.target.value)} placeholder="匿名"/></div>
       <div className="form-group"><label className="form-label">メッセージ</label><textarea className="form-textarea" value={body} onChange={e=>setBody(e.target.value)} rows={5} placeholder="感想・応援メッセージなど"/></div>
       <button className="btn btn-primary" onClick={submit} disabled={!body.trim()}>送信する</button>
+    </div>
+  );
+}
+
+// ═══════════════ IMAGE CROP MODAL ═══════════════
+// 画像をアップロードした際に、円形のアイコン枠に合わせて
+// 自由に拡大・縮小・移動（トリミング）できる編集モーダル。
+function ImageCropModal({src, onConfirm, onCancel, outputSize=480}){
+  const stageRef = useRef(null);
+  const imgRef   = useRef(null);
+  const [natural, setNatural] = useState(null); // 元画像の幅と高さ
+  const [zoom, setZoom]       = useState(1);     // 1 = ステージにフィットする最小ズーム
+  const [pos, setPos]         = useState({x:0,y:0}); // 画像中心のオフセット
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef(null);
+  const pinchStart = useRef(null);
+
+  // 画像読み込み → 初期フィット
+  useEffect(()=>{
+    const img = new Image();
+    img.onload = () => {
+      setNatural({w: img.naturalWidth, h: img.naturalHeight});
+      setZoom(1);
+      setPos({x:0,y:0});
+    };
+    img.src = src;
+  },[src]);
+
+  if(!natural) {
+    return (
+      <div className="modal-bg fadein" onClick={onCancel}>
+        <div className="modal crop-modal" onClick={e=>e.stopPropagation()}>
+          <div className="modal-title">画像を読み込み中…</div>
+        </div>
+      </div>
+    );
+  }
+
+  const STAGE = 320; // 表示上のステージサイズ(px、CSSのaspect-ratioで実際は可変だが計算基準として使用)
+  const baseScale = Math.max(STAGE/natural.w, STAGE/natural.h); // ステージを覆う最小スケール
+  const scale = baseScale * zoom;
+  const dispW = natural.w * scale;
+  const dispH = natural.h * scale;
+
+  // 画像がステージ範囲を覆うよう、移動量をクランプ
+  const clampPos = (x,y,curScale) => {
+    const w = natural.w*curScale, h = natural.h*curScale;
+    const maxX = Math.max(0,(w-STAGE)/2);
+    const maxY = Math.max(0,(h-STAGE)/2);
+    return { x: Math.min(maxX,Math.max(-maxX,x)), y: Math.min(maxY,Math.max(-maxY,y)) };
+  };
+
+  const onPointerDown = e => {
+    e.preventDefault();
+    setDragging(true);
+    const p = e.touches ? e.touches[0] : e;
+    dragStart.current = { x:p.clientX, y:p.clientY, ox:pos.x, oy:pos.y };
+  };
+  const onPointerMove = e => {
+    if(!dragging || !dragStart.current) return;
+    e.preventDefault();
+    const p = e.touches ? e.touches[0] : e;
+    const dx = p.clientX - dragStart.current.x;
+    const dy = p.clientY - dragStart.current.y;
+    setPos(clampPos(dragStart.current.ox+dx, dragStart.current.oy+dy, scale));
+  };
+  const onPointerUp = () => { setDragging(false); dragStart.current=null; pinchStart.current=null; };
+
+  const dist = (a,b) => Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+  const onTouchStartCapture = e => {
+    if(e.touches.length===2){
+      pinchStart.current = { d: dist(e.touches[0],e.touches[1]), zoom };
+      setDragging(false);
+    }
+  };
+  const onTouchMoveCapture = e => {
+    if(e.touches.length===2 && pinchStart.current){
+      e.preventDefault();
+      const d = dist(e.touches[0],e.touches[1]);
+      const next = Math.min(4, Math.max(1, pinchStart.current.zoom * (d/pinchStart.current.d)));
+      setZoom(next);
+      setPos(p=>clampPos(p.x,p.y, baseScale*next));
+    }
+  };
+
+  const onWheel = e => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.06 : 0.06;
+    setZoom(z=>{
+      const next = Math.min(4, Math.max(1, z+delta));
+      setPos(p=>clampPos(p.x,p.y, baseScale*next));
+      return next;
+    });
+  };
+
+  const onZoomSlider = e => {
+    const next = parseFloat(e.target.value);
+    setZoom(next);
+    setPos(p=>clampPos(p.x,p.y, baseScale*next));
+  };
+
+  const reset = () => { setZoom(1); setPos({x:0,y:0}); };
+
+  const confirm = () => {
+    // 表示上の座標系(STAGE基準)から、実画像ピクセル座標系のクロップ範囲を逆算
+    const cropSizeOnImg = STAGE/scale;               // ステージ1辺に対応する元画像上のサイズ
+    const centerXOnImg = natural.w/2 - pos.x/scale;
+    const centerYOnImg = natural.h/2 - pos.y/scale;
+    const sx = centerXOnImg - cropSizeOnImg/2;
+    const sy = centerYOnImg - cropSizeOnImg/2;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outputSize; canvas.height = outputSize;
+    const ctx = canvas.getContext("2d");
+    const img = imgRef.current;
+    ctx.drawImage(img, sx, sy, cropSizeOnImg, cropSizeOnImg, 0, 0, outputSize, outputSize);
+    onConfirm(canvas.toDataURL("image/jpeg", 0.85));
+  };
+
+  return (
+    <div className="modal-bg fadein" onClick={onCancel}>
+      <div className="modal crop-modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">アイコン画像を編集</div>
+        <div
+          ref={stageRef}
+          className={`crop-stage${dragging?" dragging":""}`}
+          onMouseDown={onPointerDown}
+          onMouseMove={onPointerMove}
+          onMouseUp={onPointerUp}
+          onMouseLeave={onPointerUp}
+          onTouchStart={e=>{ onTouchStartCapture(e); onPointerDown(e); }}
+          onTouchMove={e=>{ onTouchMoveCapture(e); onPointerMove(e); }}
+          onTouchEnd={onPointerUp}
+          onWheel={onWheel}
+        >
+          <img
+            ref={imgRef}
+            src={src}
+            alt=""
+            style={{
+              width: dispW, height: dispH,
+              transform: `translate(${STAGE/2 - dispW/2 + pos.x}px, ${STAGE/2 - dispH/2 + pos.y}px)`,
+            }}
+          />
+          <div className="crop-mask"/>
+        </div>
+        <div className="crop-controls">
+          <span className="crop-zoom-label">🔍 拡大</span>
+          <input type="range" min="1" max="4" step="0.01" value={zoom} onChange={onZoomSlider} className="crop-zoom-slider"/>
+          <button className="crop-reset-btn" onClick={reset}>リセット</button>
+        </div>
+        <div className="crop-hint">ドラッグで位置を移動・スライダーやホイールで拡大縮小できます</div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onCancel}>キャンセル</button>
+          <button className="btn btn-primary" onClick={confirm}>適用する</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1086,6 +1257,7 @@ function AdminPanel({store,onClose}){
   const [newFiles,setNewFiles]=useState([]);
   const [newLL,setNewLL]=useState(""); const [newLU,setNewLU]=useState("");
   const fileRef=useRef();
+  const [cropSrc,setCropSrc]=useState(null); // 著者アイコン編集中の元画像(data URI)
 
   const [saving,setSaving]=useState(false);
   const flash=async (fn) => {
@@ -1178,11 +1350,12 @@ function AdminPanel({store,onClose}){
                   {author.icon?<img src={author.icon} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:author.name.charAt(0)}
                 </div>
                 <div>
-                  <label style={{cursor:"pointer"}}><span className="btn" style={{display:"inline-block"}}>📁 選択</span>
-                    <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>setAuthor(a=>({...a,icon:ev.target.result})); r.readAsDataURL(f); }}/>
+                  <label style={{cursor:"pointer"}}><span className="btn" style={{display:"inline-block"}}>📁 選択して編集</span>
+                    <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>setCropSrc(ev.target.result); r.readAsDataURL(f); e.target.value=""; }}/>
                   </label>
+                  {author.icon&&<button className="btn" style={{marginLeft:8}} onClick={()=>setCropSrc(author.icon)}>✂️ 再編集</button>}
                   {author.icon&&<button className="btn btn-danger" style={{marginLeft:8}} onClick={()=>setAuthor(a=>({...a,icon:""}))}>削除</button>}
-                  <div className="form-hint" style={{marginTop:6}}>JPG / PNG / GIF</div>
+                  <div className="form-hint" style={{marginTop:6}}>JPG / PNG / GIF　選択後、拡大・縮小・位置を調整できます</div>
                 </div>
               </div>
             </div>
@@ -1476,6 +1649,14 @@ function AdminPanel({store,onClose}){
             </div>
           </div>
         </div>
+      )}
+
+      {cropSrc&&(
+        <ImageCropModal
+          src={cropSrc}
+          onCancel={()=>setCropSrc(null)}
+          onConfirm={dataUrl=>{ setAuthor(a=>({...a,icon:dataUrl})); setCropSrc(null); }}
+        />
       )}
     </div>
   );
