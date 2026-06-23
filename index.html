@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
 // 🔥 Firebase 設定 — Firebaseコンソールの値に書き換えてください
@@ -26,6 +27,7 @@ const FIREBASE_CONFIG = {
 firebase.initializeApp(FIREBASE_CONFIG);
 const db      = firebase.firestore();
 const storage = firebase.storage();
+const auth    = firebase.auth();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Libre+Baskerville:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
@@ -67,14 +69,9 @@ const DEFAULT_NOVELS = [
   },
 ];
 
-const ADMIN_PASSWORD = "abbcccddddeeeee";
-
 // ═══════════════ FIREBASE HELPERS ═══════════════
-// ファイル（画像など）をFirebase Storageにアップロードし、URLを返す
-// base64データURIかどうかを判定
 const isDataUri = s => typeof s === "string" && s.startsWith("data:");
 
-// 画像をCanvas経由でリサイズ・圧縮してbase64を返す（Firestore直接保存用）
 async function compressImage(dataUri, maxPx=800, quality=0.72) {
   return new Promise((resolve)=>{
     const img = new Image();
@@ -92,7 +89,6 @@ async function compressImage(dataUri, maxPx=800, quality=0.72) {
   });
 }
 
-// ひとりごとのファイルを圧縮してbase64のまま返す（Storage不使用）
 async function uploadMurmurFiles(murmurId, files) {
   return await Promise.all((files||[]).map(async (f) => {
     if (f.type==="image" && isDataUri(f.data)) {
@@ -103,7 +99,6 @@ async function uploadMurmurFiles(murmurId, files) {
   }));
 }
 
-// 著者アイコンを圧縮してbase64のまま返す（Storage不使用）
 async function uploadAuthorIcon(dataUri) {
   if (!isDataUri(dataUri)) return dataUri;
   return await compressImage(dataUri, 400, 0.80);
@@ -118,31 +113,26 @@ function useStore() {
   const [loading, setLoading]     = useState(true);
   const [dbError, setDbError]     = useState(null);
 
-  // ── リアルタイムリスナーで全データを購読 ──
   useEffect(() => {
     const unsubs = [];
     let resolved = 0;
     const check = () => { resolved++; if(resolved >= 4) setLoading(false); };
 
-    // settings/site
     unsubs.push(db.collection("settings").doc("site").onSnapshot(snap => {
       if (snap.exists) setSiteLocal(snap.data()); else setSiteLocal(DEFAULT_SITE);
       check();
     }, e => { setDbError(e.message); check(); }));
 
-    // settings/author
     unsubs.push(db.collection("settings").doc("author").onSnapshot(snap => {
       if (snap.exists) setAuthorLocal(snap.data()); else setAuthorLocal(DEFAULT_AUTHOR);
       check();
     }, e => { setDbError(e.message); check(); }));
 
-    // novels — ordered by createdAt
     unsubs.push(db.collection("novels").orderBy("createdAt","asc").onSnapshot(snap => {
       setNovelsLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       check();
     }, e => { setDbError(e.message); check(); }));
 
-    // messages — ordered by createdAt desc
     unsubs.push(db.collection("messages").orderBy("createdAt","desc").onSnapshot(snap => {
       setMsgLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       check();
@@ -151,19 +141,16 @@ function useStore() {
     return () => unsubs.forEach(u => u());
   }, []);
 
-  const uid = () => db.collection("_").doc().id; // Firestore自動ID
+  const uid = () => db.collection("_").doc().id;
 
-  // ── サイト設定 ──
   const setSite = useCallback(async v => {
     const next = typeof v === "function" ? v(site) : v;
     setSiteLocal(next);
     try { await db.collection("settings").doc("site").set(next); } catch(e) { console.error(e); }
   }, [site]);
 
-  // ── 著者 ──
   const setAuthor = useCallback(async v => {
     const next = typeof v === "function" ? v(author) : v;
-    // アイコンがbase64ならStorageへ先にアップロード
     let toSave = next;
     if (isDataUri(next.icon)) {
       try {
@@ -177,7 +164,6 @@ function useStore() {
     try { await db.collection("settings").doc("author").set(toSave); } catch(e) { console.error(e); }
   }, [author]);
 
-  // ── 作品 ──
   const addNovel = async () => {
     const now = firebase.firestore.FieldValue.serverTimestamp();
     const data = {
@@ -190,7 +176,7 @@ function useStore() {
     return ref.id;
   };
   const updateNovel = async (id, patch) => {
-    setNovelsLocal(a => a.map(n => n.id===id ? {...n,...patch} : n)); // 楽観的更新
+    setNovelsLocal(a => a.map(n => n.id===id ? {...n,...patch} : n));
     try { await db.collection("novels").doc(id).update(patch); } catch(e) { console.error(e); }
   };
   const deleteNovel = async id => {
@@ -198,7 +184,6 @@ function useStore() {
     try { await db.collection("novels").doc(id).delete(); } catch(e) { console.error(e); }
   };
 
-  // ── 章（小説ドキュメント内のchapters配列で管理） ──
   const addChapter = async nid => {
     const cid = uid();
     const ch = { id: cid, title:"新しい章", content:"" };
@@ -221,7 +206,6 @@ function useStore() {
     try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
   };
 
-  // ── メッセージ ──
   const addMessage = async m => {
     const data = { ...m, date: new Date().toLocaleString("ja-JP"), read: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp() };
@@ -236,11 +220,9 @@ function useStore() {
     try { await db.collection("messages").doc(id).update({ read: true }); } catch(e) { console.error(e); }
   };
 
-  // ── ひとりごと（author.murmurs配列で管理） ──
   const addMurmur = async (text, files) => {
     const mid = uid();
     const now = new Date();
-    // ファイルをStorageへアップロード
     let uploadedFiles = [];
     try { uploadedFiles = await uploadMurmurFiles(mid, files||[]); }
     catch(e) { console.error(e); uploadedFiles = files||[]; }
@@ -308,7 +290,6 @@ function Styles({site, lightMode}){
   const accent=site.theme?.accent||"#c8a86a";
   const bg=lightMode?"#f5f0e8":(site.theme?.bg||"#07070f");
   const font=site.theme?.font==="gothic"?"'Noto Sans JP',sans-serif":"'Cormorant Garamond','Noto Serif JP',serif";
-  // ライトモード時はテキスト色を反転
   const txt   = lightMode?"#1a1814":"#e2ddd4";
   const txt2  = lightMode?"#5c5650":"#8c8578";
   const txt3  = lightMode?"#9c9890":"#4a4840";
@@ -328,7 +309,12 @@ function Styles({site, lightMode}){
     .nav-center{display:flex;gap:4px}
     .nav-btn{background:none;border:none;cursor:pointer;font-family:var(--body);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--txt3);padding:6px 12px;border-radius:2px;transition:color .25s,background .25s}
     .nav-btn:hover{color:var(--txt2)}.nav-btn.active{color:var(--accent);background:var(--accent-dim)}
-    /* HTG TOOLBAR */
+    .nav-right{display:flex;align-items:center;gap:8px}
+    .nav-pill{background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;cursor:pointer;font-size:10px;letter-spacing:.18em;color:var(--txt2);line-height:1.6;transition:all .2s;font-family:var(--body)}
+    .nav-pill:hover{border-color:var(--border-hi);color:var(--txt)}
+    .nav-pill-admin{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+    .nav-pill-admin:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+    .nav-pill-logout{color:var(--txt3)}.nav-pill-logout:hover{border-color:var(--border-hi);color:var(--txt2)}
     /* HERO */
     .hero{padding:130px 48px 80px;max-width:960px;margin:0 auto}
     .hero-eyebrow{margin-bottom:28px}.hero-line{width:28px;height:1px;background:var(--accent);display:inline-block;vertical-align:middle;margin-right:12px}
@@ -388,7 +374,6 @@ function Styles({site, lightMode}){
     .reading-back{background:none;border:none;cursor:pointer;color:var(--txt3);font-size:15px;padding:4px;transition:color .2s}.reading-back:hover{color:var(--accent)}
     .reading-crumb{font-size:11px;color:var(--txt3);letter-spacing:.1em}.reading-crumb b{color:var(--txt2);font-weight:400}
     .progress-rail{position:fixed;top:54px;left:0;right:0;height:2px;background:var(--border);z-index:500}.progress-fill{height:100%;background:var(--accent);transition:width .1s}
-    /* ── カクヨム風 本文エリア ── */
     .reading-wrap{background:color-mix(in srgb,var(--bg) 55%,#1a1a1a 45%);min-height:100vh}
     .reading-content{max-width:820px;margin:0 auto;padding:88px 40px 60px}
     .reading-eyebrow{font-size:9px;letter-spacing:.44em;color:var(--accent);text-transform:uppercase;margin-bottom:20px;text-align:center}
@@ -457,11 +442,9 @@ function Styles({site, lightMode}){
     .form-input::placeholder,.form-textarea::placeholder{color:var(--txt3)}
     .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}.form-hint{font-size:11px;color:var(--txt2);margin-top:6px;letter-spacing:.04em}
     .color-row{display:flex;align-items:center;gap:12px}.color-swatch{width:36px;height:36px;border-radius:3px;border:1px solid rgba(255,255,255,.2);cursor:pointer;flex-shrink:0;transition:transform .15s}.color-swatch:hover{transform:scale(1.08)}.color-input-hidden{width:0;height:0;opacity:0;position:absolute}
-    /* カバープレビュー */
     .gradient-preview{height:140px;border-radius:6px;border:1px solid rgba(255,255,255,.12);margin-bottom:20px;position:relative;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.4)}
     .gp-dot{position:absolute;top:14px;right:14px;width:10px;height:10px;border-radius:50%;box-shadow:0 0 10px currentColor}
     .gp-title{position:absolute;bottom:16px;left:20px;font-family:var(--serif);font-size:20px;font-weight:300;color:#e8e4de;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.7);line-height:1.2}
-    .gp-subtitle{position:absolute;bottom:16px;left:20px;font-family:var(--serif);font-size:20px;font-weight:300;color:#e8e4de;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.7);line-height:1.2}
     .alist{display:flex;flex-direction:column;gap:1px;background:var(--border);margin-bottom:24px}
     .arow{background:var(--bg);display:flex;flex-direction:column;gap:10px;padding:14px 18px;transition:background .2s}.arow:hover{background:var(--deep)}
     .arow-top{display:flex;align-items:center;gap:10px;width:100%}
@@ -485,7 +468,6 @@ function Styles({site, lightMode}){
     .msg-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
     .msg-name{font-size:13px;color:var(--txt);font-weight:500}.msg-target{font-size:10px;letter-spacing:.18em;color:var(--accent);text-transform:uppercase;border:1px solid var(--accent-glow);padding:2px 8px;border-radius:1px}.msg-date{font-size:10px;color:var(--txt3);margin-left:auto}.msg-body{font-size:13px;line-height:1.9;color:var(--txt2);white-space:pre-wrap}.msg-acts{display:flex;gap:6px;margin-top:10px}
     .badge{background:var(--accent);color:var(--bg);font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px}
-    /* ピン・ロック */
     .novel-badge-pin{font-size:10px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);padding:1px 7px;border-radius:2px;letter-spacing:.08em;flex-shrink:0}
     .novel-badge-lock{font-size:10px;background:rgba(239,68,68,.12);border:1px solid #ef4444;color:#ef4444;padding:1px 7px;border-radius:2px;letter-spacing:.08em;flex-shrink:0}
     .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
@@ -497,13 +479,15 @@ function Styles({site, lightMode}){
     .toggle-slider::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:var(--txt3);border-radius:50%;transition:transform .2s,background .2s}
     .toggle-switch input:checked+.toggle-slider{background:var(--accent-dim);border-color:var(--accent)}
     .toggle-switch input:checked+.toggle-slider::before{transform:translateX(18px);background:var(--accent)}
-    /* 文字数統計 */
     .wc-stat{font-family:var(--serif);font-size:11px;color:var(--txt3);letter-spacing:.1em;margin-left:4px}
     .wc-stat b{color:var(--accent);font-weight:400}
     .mobile-back-btn{display:none}
+    /* AUTH MODAL TABS */
+    .auth-tab-bar{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border)}
+    .auth-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:9px 0;cursor:pointer;font-family:var(--body);font-size:12px;letter-spacing:.14em;color:var(--txt3);transition:all .2s}
+    .auth-tab.active{border-bottom-color:var(--accent);color:var(--accent)}
     @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
     @keyframes driftDown{0%{transform:translateY(-120px)}100%{transform:translateY(100vh)}}
-    /* ページ遷移オーバーレイ */
     .pt-overlay{position:fixed;inset:0;z-index:8000;pointer-events:none;display:flex;align-items:center;justify-content:center;background:transparent}
     .pt-ink-bg{position:absolute;inset:0;background:var(--bg);opacity:0}
     .pt-kanji-svg{position:relative;z-index:1}
@@ -535,15 +519,15 @@ function Styles({site, lightMode}){
       .detail-hero-content{padding:0 20px}.reading-content{padding-left:20px;padding-right:20px;padding-top:72px}.reading-foot{padding-left:20px;padding-right:20px}
       .profile-wrap,.htg-wrap{padding:100px 20px 72px}.footer{padding:32px 20px}
       .admin-overlay{flex-direction:column}
-      /* モバイル：メニュー選択前はサイドバーのみ、選択後はメインのみ */
       .admin-sidebar{width:100%;max-height:none;height:100%}
       .admin-main{display:none;padding:20px 16px 120px}
       .admin-overlay.menu-selected .admin-sidebar{display:none}
       .admin-overlay.menu-selected .admin-main{display:block}
       .save-bar{left:0}
       .form-row{grid-template-columns:1fr}
-      /* モバイル戻るボタン */
       .mobile-back-btn{display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--accent);font-family:var(--body);font-size:13px;letter-spacing:.08em;padding:0 0 20px;cursor:pointer}
+      .nav-right{gap:5px}
+      .nav-pill{padding:4px 10px;font-size:9px}
     }
   `);
 }
@@ -583,25 +567,114 @@ function MessageForm({target,targetLabel,onSend}){
     </div>
   );
 }
-function LoginModal({onSuccess,onCancel}){
-  const [val,setVal]=useState(""); const [err,setErr]=useState(false); const ref=useRef();
-  useEffect(()=>ref.current?.focus(),[]);
-  const go=()=>{ if(val===ADMIN_PASSWORD)onSuccess(); else{ setErr(true); setVal(""); setTimeout(()=>setErr(false),1600); } };
+
+// ═══════════════ AUTH LOGIN MODAL ═══════════════
+function AuthLoginModal({onSuccess, onCancel}){
+  const [tab, setTab]       = useState("email");
+  const [email, setEmail]   = useState("");
+  const [pass, setPass]     = useState("");
+  const [err, setErr]       = useState("");
+  const [loading, setLoading] = useState(false);
+  const emailRef = useRef();
+
+  useEffect(()=>{ if(tab==="email") emailRef.current?.focus(); },[tab]);
+
+  const clearErr = () => setErr("");
+
+  const loginEmail = async () => {
+    if(!email.trim()||!pass.trim()){ setErr("メールとパスワードを入力してください"); return; }
+    setLoading(true); setErr("");
+    try {
+      await auth.signInWithEmailAndPassword(email.trim(), pass);
+      onSuccess();
+    } catch(e) {
+      const msg = {
+        "auth/user-not-found":    "このメールアドレスは登録されていません",
+        "auth/wrong-password":    "パスワードが違います",
+        "auth/invalid-email":     "メールアドレスの形式が正しくありません",
+        "auth/too-many-requests": "試行回数が多すぎます。しばらく待ってください",
+        "auth/invalid-credential":"メールアドレスまたはパスワードが違います",
+      }[e.code] || `ログインに失敗しました（${e.code}）`;
+      setErr(msg);
+    }
+    setLoading(false);
+  };
+
+  const loginGoogle = async () => {
+    setLoading(true); setErr("");
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await auth.signInWithPopup(provider);
+      onSuccess();
+    } catch(e) {
+      if(e.code !== "auth/popup-closed-by-user") setErr("Googleログインに失敗しました");
+    }
+    setLoading(false);
+  };
+
   return(
     <div className="modal-bg fadein" onClick={onCancel}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400}}>
         <div className="modal-title">管理者ログイン</div>
-        <p style={{color:"var(--txt3)",fontSize:12,letterSpacing:".08em",marginBottom:20}}>編集するにはパスワードが必要です</p>
-        <div className="form-group">
-          <input ref={ref} type="password" className="form-input" placeholder="パスワード" value={val}
-            onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} style={{borderColor:err?"#ef4444":undefined}}/>
-          {err&&<div style={{color:"#ef4444",fontSize:12,marginTop:6}}>パスワードが違います</div>}
+
+        <div className="auth-tab-bar">
+          {[["email","✉️ メール"],["google","G　Google"]].map(([k,l])=>(
+            <button key={k} className={`auth-tab ${tab===k?"active":""}`}
+              onClick={()=>{ setTab(k); clearErr(); }}>
+              {l}
+            </button>
+          ))}
         </div>
-        <div className="modal-actions"><button className="btn" onClick={onCancel}>キャンセル</button><button className="btn btn-primary" onClick={go}>ログイン</button></div>
+
+        {tab==="email"&&(
+          <>
+            <div className="form-group">
+              <label className="form-label">メールアドレス</label>
+              <input ref={emailRef} type="email" className="form-input" value={email}
+                onChange={e=>{ setEmail(e.target.value); clearErr(); }}
+                onKeyDown={e=>e.key==="Enter"&&loginEmail()}
+                placeholder="admin@example.com"/>
+            </div>
+            <div className="form-group">
+              <label className="form-label">パスワード</label>
+              <input type="password" className="form-input" value={pass}
+                onChange={e=>{ setPass(e.target.value); clearErr(); }}
+                onKeyDown={e=>e.key==="Enter"&&loginEmail()}
+                placeholder="••••••••"/>
+            </div>
+            {err&&<div style={{color:"#ef4444",fontSize:12,marginBottom:12,letterSpacing:".04em"}}>{err}</div>}
+            <div className="modal-actions">
+              <button className="btn" onClick={onCancel}>キャンセル</button>
+              <button className="btn btn-primary" onClick={loginEmail} disabled={loading}>
+                {loading?"ログイン中…":"ログイン"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {tab==="google"&&(
+          <>
+            <p style={{color:"var(--txt2)",fontSize:13,lineHeight:1.9,marginBottom:24,letterSpacing:".04em"}}>
+              管理者として登録済みのGoogleアカウントでログインします。
+            </p>
+            {err&&<div style={{color:"#ef4444",fontSize:12,marginBottom:12,letterSpacing:".04em"}}>{err}</div>}
+            <div className="modal-actions">
+              <button className="btn" onClick={onCancel}>キャンセル</button>
+              <button className="btn btn-primary" onClick={loginGoogle} disabled={loading}
+                style={{display:"flex",alignItems:"center",gap:8}}>
+                {loading
+                  ? "接続中…"
+                  : <><span style={{fontWeight:700,fontFamily:"sans-serif",fontSize:15,letterSpacing:0}}>G</span>　Googleでログイン</>
+                }
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
+
 function useReadingProgress(){
   const [p,setP]=useState(0);
   useEffect(()=>{
@@ -612,10 +685,10 @@ function useReadingProgress(){
 }
 
 // ═══════════════ NAV ═══════════════
-function Nav({page,onNav,site,onLogoClick,lightMode,onToggleLight}){
+function Nav({page, onNav, site, lightMode, onToggleLight, authed, onAdminClick, onLogout}){
   return(
     <nav className="nav">
-      <div className="nav-logo" onClick={()=>{ onNav("home"); if(onLogoClick)onLogoClick(); }}>
+      <div className="nav-logo" onClick={()=>onNav("home")}>
         <div className="nav-logo-main">{site.name}</div>
         <div className="nav-logo-sub">{site.nameRoman}</div>
       </div>
@@ -624,15 +697,29 @@ function Nav({page,onNav,site,onLogoClick,lightMode,onToggleLight}){
         <button className={`nav-btn ${page==="hitorigoto"?"active":""}`} onClick={()=>onNav("hitorigoto")}>ひとりごと</button>
         <button className={`nav-btn ${page==="profile"?"active":""}`} onClick={()=>onNav("profile")}>著者</button>
       </div>
-      <button onClick={onToggleLight} style={{background:"none",border:"1px solid var(--border)",borderRadius:20,padding:"4px 14px",cursor:"pointer",fontSize:10,letterSpacing:".18em",color:"var(--txt2)",lineHeight:1.6,transition:"all .2s"}}>
-        {lightMode?"DARK":"LIGHT"}
-      </button>
+      <div className="nav-right">
+        <button className="nav-pill" onClick={onToggleLight}>
+          {lightMode?"DARK":"LIGHT"}
+        </button>
+        {authed
+          ? <>
+              <button className="nav-pill" onClick={onAdminClick} style={{borderColor:"var(--accent)",color:"var(--accent)",background:"var(--accent-dim)"}}>
+                管理 🔏
+              </button>
+              <button className="nav-pill nav-pill-logout" onClick={onLogout}>
+                ログアウト
+              </button>
+            </>
+          : <button className="nav-pill nav-pill-admin" onClick={onAdminClick}>
+              管理 🔏
+            </button>
+        }
+      </div>
     </nav>
   );
 }
 
 // ═══════════════ HOME ═══════════════
-// 本文から文字数を実カウント（空白・改行除く）
 function countChars(novel) {
   return (novel.chapters||[]).reduce((s,ch)=>s+(ch.content||"").replace(/\s/g,"").length, 0);
 }
@@ -647,7 +734,6 @@ function HomePage({site,novels,onOpen}){
   const [byDate,setByDate]=useState(false);
   const allTags=useMemo(()=>[...new Set(novels.flatMap(n=>n.tags||[]))] ,[novels]);
 
-  // order順 → ピン固定を先頭に
   const sorted=useMemo(()=>{
     const ordered=[...novels].sort((a,b)=>(a.order??9999)-(b.order??9999));
     const pinned=ordered.filter(n=>n.pinned);
@@ -661,11 +747,8 @@ function HomePage({site,novels,onOpen}){
     return list;
   },[sorted,activeTag]);
 
-  // 総文字数（全作品）
   const totalChars=useMemo(()=>novels.reduce((s,n)=>s+countChars(n),0),[novels]);
-
   const grouped=useMemo(()=>groupByYM(filtered,n=>n.updated),[filtered]);
-
   const lines=(site.catchcopy||"").split("、");
 
   const renderGrid=list=>(
@@ -773,7 +856,6 @@ function DetailPage({novel,onBack,onRead,onSendMessage}){
 }
 
 // ═══════════════ READING ═══════════════
-// 改行ルール：1改行→段落、空行（連続改行）→そのまま空白として表示
 function renderBody(content, indent=true) {
   const lines = content.split("\n");
   const result = [];
@@ -822,7 +904,6 @@ function HitorigotoPage({author}){
   const [byDate,setByDate]=useState(false);
   const murmurs=useMemo(()=>author.murmurs||[],[author.murmurs]);
   const filtered=murmurs;
-  // 古い順に並べ直してからグループ化
   const sortedAsc=useMemo(()=>[...filtered].sort((a,b)=>{
     const da=new Date(a.isoDate||a.date), db2=new Date(b.isoDate||b.date);
     return da-db2;
@@ -924,7 +1005,7 @@ function ProfilePage({author,novels,onToWorks,site,onSendMessage}){
   );
 }
 
-// ひとりごと編集リスト
+// ═══════════════ MURMUR EDIT LIST ═══════════════
 function MurmurEditList({murmurs, onUpdate, onDelete}){
   const [editId, setEditId] = useState(null);
   const [editText, setEditText] = useState("");
@@ -1020,7 +1101,6 @@ function AdminPanel({store,onClose}){
 
   const [menuSelected, setMenuSelected] = useState(false);
 
-  // スマホ：メニュー項目を選択したら全画面コンテンツ表示
   const selectSec = (id) => {
     setSec(id); setEditNid(null); setEditCh(null);
     setMenuSelected(true);
@@ -1054,7 +1134,6 @@ function AdminPanel({store,onClose}){
       </div>
 
       <div className="admin-main">
-        {/* モバイル：コンテンツ画面上部に「← メニューへ」ボタン */}
         <button className="mobile-back-btn" onClick={goBackToMenu}>← メニューへ</button>
 
         {sec==="site"&&(
@@ -1215,7 +1294,6 @@ function AdminPanel({store,onClose}){
             <div className="alist">
               {novels.length===0&&<div style={{padding:"24px",color:"var(--txt3)",fontSize:13}}>作品がありません</div>}
               {(()=>{
-                // order付きで並べる（orderがなければFirestore取得順）
                 const ordered=[...novels].sort((a,b)=>{
                   const ao=a.order??9999, bo=b.order??9999;
                   return ao-bo;
@@ -1224,7 +1302,6 @@ function AdminPanel({store,onClose}){
                   const idx=ordered.findIndex(n=>n.id===id);
                   const target=idx+dir;
                   if(target<0||target>=ordered.length) return;
-                  // swap order values
                   const newOrdered=[...ordered];
                   [newOrdered[idx],newOrdered[target]]=[newOrdered[target],newOrdered[idx]];
                   newOrdered.forEach((n,i)=>updateNovel(n.id,{order:i}));
@@ -1285,7 +1362,6 @@ function AdminPanel({store,onClose}){
               <span style={{fontFamily:"var(--serif)",fontSize:22,color:"var(--accent)",marginLeft:"auto"}}>{fmtCount(countChars(eNov))}</span>
               <span style={{fontSize:11,color:"var(--txt2)"}}>/ {(eNov.chapters||[]).length}章</span>
             </div>
-            {/* カバープレビュー */}
             <div className="gradient-preview" style={{background:`linear-gradient(160deg,${eNov.color1},${eNov.color2})`}}>
               <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.55) 0%,transparent 60%)"}}/>
               <div className="gp-dot" style={{background:eNov.accent,color:eNov.accent}}/>
@@ -1387,27 +1463,23 @@ function AdminPanel({store,onClose}){
   );
 }
 
-// ═══════════════ ROOT ═══════════════
 // ═══════════════ BG TEXT LAYER ═══════════════
 function BgTextLayer({novels}){
   const [cols, setCols] = React.useState([]);
-  const poolRef = React.useRef([]);    // 未使用フレーズのキュー
-  const usedRef = React.useRef([]);    // 使用済みフレーズ
-  const colTimersRef = React.useRef({}); // 列ごとのタイマー
+  const poolRef = React.useRef([]);
+  const usedRef = React.useRef([]);
+  const colTimersRef = React.useRef({});
 
-  // 全文プールを抽出してpoolRefに格納
   const buildPool = React.useCallback((nvls)=>{
     const sentences = [];
     nvls.forEach(n=>{
       (n.chapters||[]).forEach(ch=>{
         const txt = (ch.content||"").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
-        // セリフ抽出
         const dialogRe = /[「『]((?:[^「『」』]|(?:[「『][^「『」』]*[」』]))*)[」』]/g;
         let m;
         while((m=dialogRe.exec(txt))!==null){
           const s=m[0].trim(); if(s.length>=6) sentences.push(s);
         }
-        // 地の文（句点単位）
         const masked=txt.replace(/[「『]((?:[^「『」』]|(?:[「『][^「『」』]*[」』]))*)[」』]/g,s=>"　".repeat(s.length));
         masked.split(/(?<=。)/).forEach((_,i,arr)=>{
           let pos=0; for(let j=0;j<i;j++) pos+=arr[j].length;
@@ -1417,12 +1489,10 @@ function BgTextLayer({novels}){
         });
       });
     });
-    // シャッフルしてpoolに
     poolRef.current=[...sentences].sort(()=>Math.random()-.5);
     usedRef.current=[];
   },[]);
 
-  // プールから次のフレーズを取得（尽きたら使用済みをシャッフルして再投入）
   const nextPhrase = React.useCallback(()=>{
     if(poolRef.current.length===0){
       if(usedRef.current.length===0) return null;
@@ -1435,7 +1505,6 @@ function BgTextLayer({novels}){
     return toV(phrase);
   },[]);
 
-  // 列の初期化
   React.useEffect(()=>{
     if(!novels||novels.length===0) return;
     buildPool(novels);
@@ -1458,10 +1527,8 @@ function BgTextLayer({novels}){
     });
     setCols(initial);
 
-    // 各列のアニメ終了タイミングで次のフレーズに差し替え
     initial.forEach(col=>{
       const schedule=()=>{
-        // delay補正後の残り時間
         const remaining = col.dur*1000 - Math.abs(col.delay)*1000;
         const wait = remaining > 0 ? remaining : col.dur*1000;
         const timer=setTimeout(()=>{
@@ -1472,7 +1539,6 @@ function BgTextLayer({novels}){
               ? {...c, text:phrase, delay:0, goUp:Math.random()>.5, dur:44+Math.random()*26, opacity:0.042+Math.random()*0.028, key:c.key}
               : c
           ));
-          // 次のサイクルをスケジュール
           colTimersRef.current[col.key]=setTimeout(function loop(){
             const p2=nextPhrase(); if(!p2) return;
             setCols(prev=>prev.map(c=>
@@ -1518,6 +1584,7 @@ function BgTextLayer({novels}){
   );
 }
 
+// ═══════════════ ROOT APP ═══════════════
 function App(){
   const store=useStore();
   const {site,author,novels,addMessage,loading,dbError}=store;
@@ -1531,6 +1598,15 @@ function App(){
 
   const [transiting,setTransiting]=useState(false);
   const [visPage,setVisPage]=useState("home");
+
+  // Firebase Auth 状態監視
+  useEffect(()=>{
+    const unsub = auth.onAuthStateChanged(user=>{
+      setAuthed(!!user);
+      if(!user) setAdminOpen(false);
+    });
+    return ()=>unsub();
+  },[]);
 
   const TRANSITIONS=[
     (ov,done)=>{ov.style.cssText="position:fixed;inset:0;z-index:8000;pointer-events:none;background:var(--bg);opacity:0;clip-path:circle(0% at 50% 50%)";ov.style.transition="opacity 1s cubic-bezier(.4,0,.2,1),clip-path 1s cubic-bezier(.4,0,.2,1)";requestAnimationFrame(()=>requestAnimationFrame(()=>{ov.style.opacity="1";ov.style.clipPath="circle(120% at 50% 50%)"}));setTimeout(done,1050);},
@@ -1600,9 +1676,19 @@ function App(){
       },40);
     });
   };
+
   const openNovel=n=>{ setNovel(n); nav("detail"); };
   const openChapter=id=>{ setChapterId(id); nav("reading"); };
   const liveNovel=novel?novels.find(n=>n.id===novel.id)||novel:null;
+
+  const handleAdminClick = () => {
+    if(authed) setAdminOpen(true);
+    else setShowLogin(true);
+  };
+
+  const handleLogout = async () => {
+    await auth.signOut();
+  };
 
   // タブタイトル
   useEffect(()=>{
@@ -1632,14 +1718,6 @@ function App(){
     link.href=href;
   },[author.icon,site.name,site.theme?.accent,site.theme?.bg]);
 
-  // ロゴ5連打でログイン
-  const clicks=useRef(0); const timer=useRef(null);
-  const handleLogoClick=()=>{
-    clicks.current+=1; clearTimeout(timer.current);
-    timer.current=setTimeout(()=>{ clicks.current=0; },1500);
-    if(clicks.current>=5){ clicks.current=0; if(authed)setAdminOpen(true); else setShowLogin(true); }
-  };
-
   return(
     <>
       <Styles site={site} lightMode={lightMode}/>
@@ -1664,13 +1742,20 @@ function App(){
               1. <a href="https://console.firebase.google.com/" target="_blank" style={{color:"var(--accent)"}}>Firebase Console</a> でプロジェクトを作成<br/>
               2. Firestore Database を有効化（テストモードで開始）<br/>
               3. Storage を有効化<br/>
-              4. プロジェクト設定 → ウェブアプリを追加 → 設定値をコピー<br/>
-              5. このHTMLの <code style={{background:"var(--surface)",padding:"1px 5px"}}>FIREBASE_CONFIG</code> を書き換えて保存
+              4. Authentication を有効化<br/>
+              5. プロジェクト設定 → ウェブアプリを追加 → 設定値をコピー<br/>
+              6. このHTMLの <code style={{background:"var(--surface)",padding:"1px 5px"}}>FIREBASE_CONFIG</code> を書き換えて保存
             </div>
           </div>
         )}
         {!loading&&!dbError&&!adminOpen&&page!=="reading"&&(
-          <Nav page={page} onNav={nav} site={site} onLogoClick={handleLogoClick} lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}/>
+          <Nav
+            page={page} onNav={nav} site={site}
+            lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}
+            authed={authed}
+            onAdminClick={handleAdminClick}
+            onLogout={handleLogout}
+          />
         )}
         {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={novels} onOpen={openNovel}/>}
         {!loading&&!dbError&&!adminOpen&&page==="hitorigoto"&&<HitorigotoPage author={author}/>}
@@ -1678,7 +1763,12 @@ function App(){
         {!loading&&!dbError&&!adminOpen&&page==="reading"&&liveNovel&&chapterId&&<ReadingPage novel={liveNovel} chapterId={chapterId} onBack={()=>nav("detail")} onChapter={setChapterId}/>}
         {!loading&&!dbError&&!adminOpen&&page==="profile"&&<ProfilePage author={author} novels={novels} onToWorks={()=>nav("home")} site={site} onSendMessage={addMessage}/>}
         {!loading&&!dbError&&adminOpen&&<AdminPanel store={store} onClose={()=>setAdminOpen(false)}/>}
-        {showLogin&&<LoginModal onSuccess={()=>{ setAuthed(true); setShowLogin(false); setAdminOpen(true); }} onCancel={()=>setShowLogin(false)}/>}
+        {showLogin&&(
+          <AuthLoginModal
+            onSuccess={()=>{ setShowLogin(false); setAdminOpen(true); }}
+            onCancel={()=>setShowLogin(false)}
+          />
+        )}
       </div>
     </>
   );
