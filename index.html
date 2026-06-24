@@ -1393,6 +1393,12 @@ function HitorigotoPage({author}){
           }
         </div>
       </div>
+      {lightbox&&<div className="lightbox" onClick={()=>setLightbox(null)}><img src={lightbox} alt=""/></div>}
+      <Footer site={{}}/>
+    </>
+  );
+}
+
 // ═══════════════ ENCOUNTER (九十九人の男たち) ═══════════════
 // 元の「九十九人の男たち」サイトを「淵」内のタブとして移植したもの。
 // 進捗（すれ違った男のID一覧）はFirebase Authの匿名認証でユーザーごとに
