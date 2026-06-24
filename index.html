@@ -1282,7 +1282,7 @@ function Nav({page, onNav, site, lightMode, onToggleLight, authed, onAdminClick,
       <div className="nav-center">
         <button className={`nav-btn ${page==="home"?"active":""}`} onClick={()=>onNav("home")}>作品一覧</button>
         <button className={`nav-btn ${page==="hitorigoto"?"active":""}`} onClick={()=>onNav("hitorigoto")}>ひとりごと</button>
-        <button className={`nav-btn ${page==="encounter"?"active":""}`} onClick={()=>onNav("encounter")}>すれ違い</button>
+        <button className={`nav-btn ${page==="encounter"?"active":""}`} onClick={()=>onNav("encounter")}>九十九人の男たち</button>
         <button className={`nav-btn ${page==="profile"?"active":""}`} onClick={()=>onNav("profile")}>著者</button>
       </div>
       <div className="nav-right">
@@ -1575,7 +1575,6 @@ function EncounterPage({onExit, stories}){
   const uid = useAnonAuthUid();
   const motokoStories = stories && stories.length>0 ? stories : MOTOKO_STORIES;
   const [viewedNums, setViewedNums] = useState([]); // すれ違った男のnum一覧（99は除く）
-  const [progressLoaded, setProgressLoaded] = useState(false);
   const [current, setCurrent] = useState(null);
   const [showStory, setShowStory] = useState(false);
   const [cityShift, setCityShift] = useState(0);
@@ -1585,48 +1584,49 @@ function EncounterPage({onExit, stories}){
   const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
   const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
   const initializedRef = useRef(false);
+  const viewedNumsRef = useRef([]); // 進捗読み込みが遅れても、その間に出会った男を見失わないようにするための最新値参照
+  viewedNumsRef.current = viewedNums;
 
-  // Firestoreから進捗を読み込む
+  const pickNext = useCallback((nums)=>{
+    const usedNums = nums!==undefined ? nums : viewedNumsRef.current;
+    if(usedNums.length >= motokoStories.filter(s=>s.num!==99).length){
+      return motokoStories.find(s=>s.num===99) || motokoStories[motokoStories.length-1];
+    }
+    const pool = motokoStories.filter(s=>s.num<99 && !usedNums.includes(s.num));
+    const usable = pool.length>0 ? pool : motokoStories.filter(s=>s.num<99);
+    return usable[Math.floor(Math.random()*usable.length)];
+  },[motokoStories]);
+
+  // 認証や進捗の読み込みを待たず、画面が開いた瞬間に最初の男をすぐ表示する。
+  // 認証(uid取得)に時間がかかったり失敗したりしても、体験自体は止めない。
+  useEffect(()=>{
+    if(initializedRef.current) return;
+    initializedRef.current = true;
+    setCurrent(pickNext([]));
+    setCityShift(Math.floor(Math.random()*12)*25);
+  },[pickNext]);
+
+  // uidが取得できたら（多くは即時〜数百ms後）、Firestoreの進捗を読み込んで反映する。
+  // すでに画面には最初の男が表示済みなので、ここでは進捗(viewedNums)だけを追いつかせる。
   useEffect(()=>{
     if(!uid) return;
     let mounted = true;
     db.collection("encounterProgress").doc(uid).get().then(snap=>{
       if(!mounted) return;
-      if(snap.exists){
-        setViewedNums(snap.data().viewedNums||[]);
+      if(snap.exists && Array.isArray(snap.data().viewedNums)){
+        setViewedNums(snap.data().viewedNums);
       }
-      setProgressLoaded(true);
-    }).catch(e=>{
-      console.error(e);
-      setProgressLoaded(true);
-    });
+    }).catch(e=>console.error(e));
     return ()=>{ mounted=false; };
   },[uid]);
 
   const saveProgress = useCallback((nums)=>{
-    if(!uid) return;
+    if(!uid) return; // 認証が済んでいない/失敗していても、表示自体は継続できる。保存だけスキップされる。
     db.collection("encounterProgress").doc(uid).set({
       viewedNums: nums,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }).catch(e=>console.error(e));
   },[uid]);
-
-  const pickNext = useCallback(()=>{
-    if(viewedNums.length >= motokoStories.filter(s=>s.num!==99).length){
-      return motokoStories.find(s=>s.num===99) || motokoStories[motokoStories.length-1];
-    }
-    const pool = motokoStories.filter(s=>s.num<99 && !viewedNums.includes(s.num));
-    const usable = pool.length>0 ? pool : motokoStories.filter(s=>s.num<99);
-    return usable[Math.floor(Math.random()*usable.length)];
-  },[viewedNums, motokoStories]);
-
-  // 初回ロード時に最初の男を提示
-  useEffect(()=>{
-    if(!progressLoaded || initializedRef.current) return;
-    initializedRef.current = true;
-    setCurrent(pickNext());
-    setCityShift(Math.floor(Math.random()*12)*25);
-  },[progressLoaded, pickNext]);
 
   const handleShowStory = () => {
     if(!current) return;
@@ -1669,7 +1669,7 @@ function EncounterPage({onExit, stories}){
     setViewedNums([]);
     saveProgress([]);
     setLastNewNum(null);
-    setCurrent(pickNext());
+    setCurrent(pickNext([]));
     setCityHidden(false);
     setCityShift(Math.floor(Math.random()*12)*25);
   };
@@ -1947,7 +1947,7 @@ function AdminPanel({store,onClose}){
     {id:"author",label:"著者プロフィール",icon:"✍️"},
     {id:"links",label:"SNS・リンク",icon:"🔗"},
     {id:"hitorigoto",label:"ひとりごと管理",icon:"💬"},
-    {id:"motoko",label:"すれ違い管理",icon:"🚶"},
+    {id:"motoko",label:"九十九人の男たち",icon:"🚶"},
     {id:"messages",label:"受信メッセージ",icon:"✉️",badge:unread},
     {id:"theme",label:"デザイン・テーマ",icon:"🎨"},
     {id:"novels",label:"作品管理",icon:"📚"},
@@ -2110,9 +2110,9 @@ function AdminPanel({store,onClose}){
             : sorted;
           return(
             <div className="fadein">
-              <div className="admin-title">すれ違い管理（九十九人の男たち）</div>
+              <div className="admin-title">九十九人の男たち</div>
               <div style={{marginBottom:16,fontSize:12,color:"var(--txt3)"}}>
-                「すれ違い」タブで表示される物語を編集できます。並び順（番号）は追加・削除のたびに自動で詰め直されます。「終わりの男」は常に末尾固定で削除できません。
+                「九十九人の男たち」タブで表示される物語を編集できます。並び順（番号）は追加・削除のたびに自動で詰め直されます。「終わりの男」は常に末尾固定で削除できません。
               </div>
               <div className="form-group" style={{marginBottom:20}}>
                 <input className="form-input" placeholder="タイトル・カテゴリ・本文で検索…" value={motokoFilter} onChange={e=>setMotokoFilter(e.target.value)}/>
@@ -2659,7 +2659,7 @@ function App(){
     const base=site.name||"文藻";
     if(page==="home") document.title=base;
     else if(page==="hitorigoto") document.title=`ひとりごと — ${base}`;
-    else if(page==="encounter") document.title=`すれ違い — ${base}`;
+    else if(page==="encounter") document.title=`九十九人の男たち — ${base}`;
     else if(page==="profile") document.title=`著者プロフィール — ${base}`;
     else if(page==="detail"&&liveNovel) document.title=`${liveNovel.title} — ${base}`;
     else if(page==="reading"&&liveNovel){
