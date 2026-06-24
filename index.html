@@ -651,6 +651,154 @@ function Styles({site, lightMode}){
     }
     .enc-blackout.show{ opacity:1; pointer-events:auto; }
     @keyframes encPulse{ 0%{opacity:.2;} 50%{opacity:.5;} 100%{opacity:.2;} }
+
+    /* ── 100人目 幻の男 シーケンス ── */
+    .enc-100-root{
+      position:fixed; inset:0; z-index:800; background:#000;
+      display:flex; flex-direction:column;
+      justify-content:center; align-items:center;
+      font-family:var(--enc-font); color:#fff;
+      opacity:0; pointer-events:none;
+      transition:opacity 3s ease;
+    }
+    .enc-100-root.show{ opacity:1; pointer-events:auto; }
+    /* シルエット背景 */
+    .enc-100-silhouette{
+      position:absolute; inset:0;
+      display:flex; align-items:flex-end; justify-content:center;
+      overflow:hidden; pointer-events:none;
+    }
+    .enc-100-silhouette svg{
+      width:260px; height:auto; opacity:.12;
+      filter:blur(.5px);
+      animation:enc100sway 8s ease-in-out infinite;
+    }
+    @keyframes enc100sway{
+      0%,100%{transform:translateY(0) scale(1);}
+      50%{transform:translateY(-6px) scale(1.01);}
+    }
+    /* 視線の光点（瞳） */
+    .enc-100-eyes{
+      position:absolute; top:0; left:0; width:100%; height:100%;
+      pointer-events:none;
+    }
+    .enc-100-eye{
+      position:absolute; width:3px; height:3px; border-radius:50%;
+      background:rgba(200,168,106,.6);
+      box-shadow:0 0 12px 4px rgba(200,168,106,.25);
+      animation:enc100blink 5s ease-in-out infinite;
+    }
+    @keyframes enc100blink{
+      0%,45%,55%,100%{opacity:1;} 50%{opacity:0;}
+    }
+    /* テキストコンテンツ */
+    .enc-100-content{
+      position:relative; z-index:10;
+      max-width:620px; padding:0 32px;
+      display:flex; flex-direction:column; align-items:center;
+      gap:0;
+    }
+    .enc-100-num{
+      font-size:.7rem; letter-spacing:.5rem; color:#555; margin-bottom:1.4rem;
+      opacity:0; animation:enc100rise 1.2s ease .4s forwards;
+    }
+    .enc-100-title{
+      font-size:2rem; font-weight:400; letter-spacing:.3rem;
+      color:#e8e0d4; text-align:center; line-height:1.5;
+      margin-bottom:2.5rem;
+      opacity:0; animation:enc100rise 1.2s ease 1s forwards;
+    }
+    .enc-100-rule{
+      width:60px; height:1px; background:rgba(200,168,106,.35);
+      margin-bottom:2.5rem;
+      opacity:0; animation:enc100rise .8s ease 1.8s forwards;
+    }
+    .enc-100-text{
+      font-size:.95rem; line-height:2.6; white-space:pre-wrap;
+      color:#aaa; text-align:justify; text-justify:inter-ideograph;
+      max-height:45vh; overflow-y:auto;
+      padding-right:8px;
+      opacity:0; animation:enc100rise 1.4s ease 2.2s forwards;
+      margin-bottom:3rem;
+    }
+    .enc-100-text::-webkit-scrollbar{ width:2px; }
+    .enc-100-text::-webkit-scrollbar-thumb{ background:#333; }
+    /* コンプリートバナー */
+    .enc-100-complete{
+      opacity:0; animation:enc100rise 1.2s ease 3.5s forwards;
+      display:flex; flex-direction:column; align-items:center; gap:.8rem;
+      margin-bottom:2.8rem;
+    }
+    .enc-100-complete-badge{
+      font-size:.62rem; letter-spacing:.4rem; color:rgba(200,168,106,.7);
+      border:1px solid rgba(200,168,106,.25); padding:4px 18px; border-radius:20px;
+    }
+    .enc-100-complete-msg{
+      font-size:.85rem; line-height:2.2; color:#888;
+      text-align:center; letter-spacing:.06rem;
+    }
+    .enc-100-btn{
+      background:transparent; border:1px solid #333; color:#888;
+      padding:12px 44px; cursor:pointer; font-family:var(--enc-font); font-size:.82rem;
+      transition:.4s; letter-spacing:.12rem;
+      opacity:0; animation:enc100rise 1s ease 4.2s forwards;
+    }
+    .enc-100-btn:hover{ border-color:rgba(200,168,106,.5); color:rgba(200,168,106,.9); }
+    @keyframes enc100rise{
+      from{opacity:0; transform:translateY(12px);}
+      to{opacity:1; transform:translateY(0);}
+    }
+    /* archiveカード — 出会った男はクリック可能に */
+    .enc-archive-card.met{
+      cursor:pointer;
+    }
+    .enc-archive-card.met:hover{
+      border-color:rgba(200,168,106,.45);
+      color:#f0ece4;
+      background:rgba(200,168,106,.06);
+    }
+    /* archiveモーダル内のストーリー再読ビュー */
+    .enc-archive-reread-overlay{
+      position:absolute; inset:0; z-index:20;
+      background:#0a0a0c;
+      display:flex; flex-direction:column;
+      animation:encArchiveFadeIn .25s ease;
+    }
+    .enc-archive-reread-header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:22px 28px 18px; border-bottom:1px solid #1c1c1f; flex-shrink:0;
+    }
+    .enc-archive-reread-back{
+      background:none; border:none; color:#777; font-family:var(--enc-font);
+      font-size:.8rem; letter-spacing:.12rem; cursor:pointer; transition:.2s;
+      padding:0;
+    }
+    .enc-archive-reread-back:hover{ color:#ccc; }
+    .enc-archive-reread-body{
+      flex:1; overflow-y:auto; padding:32px 36px 48px;
+    }
+    .enc-archive-reread-body::-webkit-scrollbar{ width:2px; }
+    .enc-archive-reread-body::-webkit-scrollbar-thumb{ background:#333; }
+    .enc-archive-reread-num{
+      font-size:.68rem; letter-spacing:.14rem; color:#555; margin-bottom:.6rem;
+    }
+    .enc-archive-reread-title{
+      font-size:1.5rem; font-weight:500; letter-spacing:.18rem; color:#e0dcd4;
+      margin-bottom:.5rem;
+    }
+    .enc-archive-reread-cat{
+      font-size:.7rem; color:#666; border:1px solid #333;
+      padding:2px 8px; border-radius:10px; display:inline-block; margin-bottom:2.2rem;
+    }
+    .enc-archive-reread-content{
+      font-size:1rem; line-height:2.6; white-space:pre-wrap;
+      color:#bbb; text-align:justify;
+    }
+    @media(max-width:680px){
+      .enc-100-title{ font-size:1.5rem; }
+      .enc-100-text{ font-size:.88rem; line-height:2.4; max-height:38vh; }
+      .enc-archive-reread-body{ padding:22px 20px 36px; }
+    }
     .enc-story-view::-webkit-scrollbar{ width:2px; }
     .enc-story-view::-webkit-scrollbar-thumb{ background:#333; }
     /* 既読一覧（図鑑）モーダル */
@@ -1580,20 +1728,36 @@ function useAnonAuthUid(){
   return uid;
 }
 
+const ABSENT_MAN_TEXT = `百人目の男は、いなかった。
+
+いや、厳密にはそこにいるべき場所に、誰ひとりとして立っていなかった。九十九人の男たちの物語がすべて終わり、九十九人目の男が最後の頁を閉じたとき、舞台の上には静寂だけが残された。街の灯は消え、世界は深淵なる暗闇に包まれた。しかし、その漆黒の暗闇の中で、ふと何かが「開く」音がした。百人目の男は、登場人物ではない。彼は物語の輪郭の外側にいた。彼は物語を読み、それを見届け、そして最後にはこうして振り返っている「あなた」の近くにいる。朝の通勤電車の窓ガラスに映るぼんやりとした輪郭として。深夜、誰にも言えない秘密を反芻する瞬間の吐息として。あるいは、九十九人の男たちの誰にも感情移入できず、ただ彼らを冷ややかに、あるいは痛ましく見守っていたはずの、あなたの視線そのものとして。
+
+「世界は一つの本になった」と九十九人目の男は言った。ならば、その本を今、開いて読んでいるのは誰なのか。百人目の男は、何もしない。彼は物語に介入しない。ただ、読み終えた本の表紙をなぞり、そこに刻まれた九十九の傷跡——いや、九十九の「生」の重みを、自分の記憶の一部として引き受ける。物語の中の男たちは消えた。しかしその物語を読み終えてしまったという事実は、あなたの心に小さな、けれど決して消えることのない棘となって残る。
+
+物語は終わった。
+しかし本を閉じた後の世界は、閉じる前と同じままではないはずだ。
+あなたは閉じた本の表紙に自分の指紋を残した。その瞬間から、あなたもまた、この都市の物語の一部となる。
+
+百人目の男——それは、九十九人の断片をすべて飲み込み、それでもなお「明日」という新しい頁をめくり続ける、現実の此方にいるあなただ。
+
+本は閉じた。
+さあ、顔を上げてほしい。
+街の灯は、あなたが目を覚ますのを待っている。`;
+
 function EncounterPage({onExit, stories}){
   const uid = useAnonAuthUid();
   const motokoStories = stories && stories.length>0 ? stories : MOTOKO_STORIES;
-  const [viewedNums, setViewedNums] = useState([]); // すれ違った男のnum一覧（99は除く）
+  const [viewedNums, setViewedNums] = useState([]);
   const [current, setCurrent] = useState(null);
   const [showStory, setShowStory] = useState(false);
   const [cityShift, setCityShift] = useState(0);
   const [cityHidden, setCityHidden] = useState(false);
-  const [blackout, setBlackout] = useState(false);
-  const [fadeOut, setFadeOut] = useState(false); // encounter-view / story-view の表示切替アニメ用
-  const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
-  const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
+  const [show100, setShow100] = useState(false);       // 幻の100人目シーケンス
+  const [fadeOut, setFadeOut] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [lastNewNum, setLastNewNum] = useState(null);
   const initializedRef = useRef(false);
-  const viewedNumsRef = useRef([]); // 進捗読み込みが遅れても、その間に出会った男を見失わないようにするための最新値参照
+  const viewedNumsRef = useRef([]);
   viewedNumsRef.current = viewedNums;
 
   const pickNext = useCallback((nums)=>{
@@ -1606,8 +1770,6 @@ function EncounterPage({onExit, stories}){
     return usable[Math.floor(Math.random()*usable.length)];
   },[motokoStories]);
 
-  // 認証や進捗の読み込みを待たず、画面が開いた瞬間に最初の男をすぐ表示する。
-  // 認証(uid取得)に時間がかかったり失敗したりしても、体験自体は止めない。
   useEffect(()=>{
     if(initializedRef.current) return;
     initializedRef.current = true;
@@ -1615,8 +1777,6 @@ function EncounterPage({onExit, stories}){
     setCityShift(Math.floor(Math.random()*12)*25);
   },[pickNext]);
 
-  // uidが取得できたら（多くは即時〜数百ms後）、Firestoreの進捗を読み込んで反映する。
-  // すでに画面には最初の男が表示済みなので、ここでは進捗(viewedNums)だけを追いつかせる。
   useEffect(()=>{
     if(!uid) return;
     let mounted = true;
@@ -1630,7 +1790,7 @@ function EncounterPage({onExit, stories}){
   },[uid]);
 
   const saveProgress = useCallback((nums)=>{
-    if(!uid) return; // 認証が済んでいない/失敗していても、表示自体は継続できる。保存だけスキップされる。
+    if(!uid) return;
     db.collection("encounterProgress").doc(uid).set({
       viewedNums: nums,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1648,18 +1808,18 @@ function EncounterPage({onExit, stories}){
         const next = [...new Set([...viewedNums, current.num])];
         setViewedNums(next);
         saveProgress(next);
-        setLastNewNum(current.num); // 今回新しく出会った男としてマーク（図鑑を閉じるまでNEW表示）
+        setLastNewNum(current.num);
       }
     },600);
   };
 
   const handleNextMan = () => {
     if(current && current.num===99){
-      // 最後の男 → ブラックアウト演出
+      // 最後の男 → 暗転後に幻の100人目シーケンスへ
       setFadeOut(true);
       setTimeout(()=>{
         setShowStory(false);
-        setBlackout(true);
+        setShow100(true);
       },1000);
       return;
     }
@@ -1674,7 +1834,7 @@ function EncounterPage({onExit, stories}){
   };
 
   const handleRestart = () => {
-    setBlackout(false);
+    setShow100(false);
     setViewedNums([]);
     saveProgress([]);
     setLastNewNum(null);
@@ -1685,8 +1845,14 @@ function EncounterPage({onExit, stories}){
 
   const closeArchive = () => {
     setShowArchive(false);
-    setLastNewNum(null); // 図鑑を閉じたらNEW表示はクリアする
+    setLastNewNum(null);
   };
+
+  // 瞳の光点：ランダムに2点配置（シルエットの顔のあたり）
+  const eyePositions = useMemo(()=>[
+    {top:"28%", left:"48%"},
+    {top:"28%", left:"52%"},
+  ],[]);
 
   return (
     <div className="enc-root">
@@ -1730,17 +1896,48 @@ function EncounterPage({onExit, stories}){
 
       <div className="enc-progress">{viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った</div>
 
-      <div className={`enc-blackout${blackout?" show":""}`}>
-        <div style={{marginBottom:"2rem",opacity:.4,letterSpacing:".6rem",fontSize:".8rem"}}>NO.???</div>
-        <h1 style={{fontSize:"1.8rem",fontWeight:500,marginBottom:"3rem",letterSpacing:".2rem"}}>これは、あなたの物語</h1>
-        <div style={{lineHeight:2.8,color:"#999",fontSize:"1rem",maxWidth:500,padding:"0 25px"}}>
-          九十九人の男たちの記録はここで途絶えている。<br/><br/>
-          ここから先は、まだインクの乗っていない白紙の頁。<br/>
-          街の喧騒に戻り、呼吸を整え、<br/>
-          歩き出すあなたの足跡こそが、<br/>
-          最後の一篇となる。
+      {/* ── 幻の百人目（不在の男）シーケンス ── */}
+      <div className={`enc-100-root${show100?" show":""}`}>
+        {/* シルエット */}
+        <div className="enc-100-silhouette">
+          <svg viewBox="0 0 200 420" xmlns="http://www.w3.org/2000/svg" fill="#fff">
+            {/* 頭 */}
+            <ellipse cx="100" cy="52" rx="28" ry="32"/>
+            {/* 首・肩・胴 */}
+            <path d="M84 82 C74 96 54 108 46 140 L46 270 L154 270 L154 140 C146 108 126 96 116 82 Z"/>
+            {/* 左腕 */}
+            <path d="M46 140 C38 160 30 190 28 230 L48 234 C50 200 56 172 64 150 Z"/>
+            {/* 右腕 */}
+            <path d="M154 140 C162 160 170 190 172 230 L152 234 C150 200 144 172 136 150 Z"/>
+            {/* 脚 */}
+            <rect x="70" y="268" width="26" height="140" rx="6"/>
+            <rect x="104" y="268" width="26" height="140" rx="6"/>
+          </svg>
         </div>
-        <button className="enc-next-btn" style={{marginTop:"4rem"}} onClick={handleRestart}>最初から歩き直す</button>
+        {/* 瞳の光点 */}
+        <div className="enc-100-eyes">
+          {eyePositions.map((pos,i)=>(
+            <div key={i} className="enc-100-eye" style={{top:pos.top, left:pos.left, animationDelay:`${i*0.3}s`}}/>
+          ))}
+        </div>
+        {/* テキストコンテンツ */}
+        <div className="enc-100-content">
+          <div className="enc-100-num">NO.100 — 不在の男</div>
+          <h2 className="enc-100-title">百人目の男は、<br/>いなかった。</h2>
+          <div className="enc-100-rule"/>
+          <div className="enc-100-text">{ABSENT_MAN_TEXT}</div>
+          {/* コンプリートバナー */}
+          <div className="enc-100-complete">
+            <div className="enc-100-complete-badge">✦ ALL RECORDS COMPLETE ✦</div>
+            <div className="enc-100-complete-msg">
+              九十九人の男たちの生き様を、最後まで見届けてくれた。<br/>
+              その眼差しに、心からの敬意を。
+            </div>
+          </div>
+          <button className="enc-100-btn" onClick={handleRestart}>
+            もう一度、街を歩く
+          </button>
+        </div>
       </div>
 
       {showArchive && (
@@ -1757,7 +1954,10 @@ function EncounterPage({onExit, stories}){
 
 // 既読一覧（図鑑）モーダル：カテゴリ別に99人を「？」グリッドで表示し、
 // 出会った男は名前を表示する。直近で新しく出会った男には「NEW」を付ける。
+// 出会った男のカードをタップすると物語を再読できる。
 function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose}){
+  const [rereadStory, setRereadStory] = useState(null); // 再読中の物語（nullなら一覧表示）
+
   const categories = useMemo(()=>{
     const order = [];
     const map = new Map();
@@ -1772,42 +1972,75 @@ function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose}){
   const totalCount = (stories||[]).filter(s=>s.num!==99).length;
   const metCount = viewedNums.length;
 
+  const handleCardClick = (s, met) => {
+    if(!met) return;
+    setRereadStory(s);
+  };
+
   return (
-    <div className="enc-archive-overlay" onClick={onClose}>
-      <div className="enc-archive-panel" onClick={e=>e.stopPropagation()}>
-        <div className="enc-archive-header">
-          <div>
-            <div className="enc-archive-title">すれ違った男たち</div>
-            <div className="enc-archive-sub">街で出会った記録</div>
-          </div>
-          <button className="enc-archive-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="enc-archive-count">
-          <span>{metCount} 人と出会った</span>
-          <span>残り {Math.max(0, totalCount-metCount)} 人</span>
-        </div>
-        <div className="enc-archive-scroll">
-          {categories.map(({cat,items})=>(
-            <div key={cat} className="enc-archive-cat-group">
-              <div className="enc-archive-cat-label">{cat}</div>
-              <div className="enc-archive-grid">
-                {items.map(s=>{
-                  const met = viewedNums.includes(s.num);
-                  const isNew = met && lastNewNum===s.num;
-                  return (
-                    <div key={s.num} className={`enc-archive-card${met?" met":""}`}>
-                      {met
-                        ? <span className="enc-archive-card-name">{s.title}</span>
-                        : <span className="enc-archive-card-q">？</span>
-                      }
-                      {isNew && <span className="enc-archive-new">NEW</span>}
-                    </div>
-                  );
-                })}
-              </div>
+    <div className="enc-archive-overlay" onClick={rereadStory ? undefined : onClose}>
+      <div className="enc-archive-panel" onClick={e=>e.stopPropagation()} style={{position:"relative"}}>
+
+        {/* ── 通常：一覧表示 ── */}
+        {!rereadStory && <>
+          <div className="enc-archive-header">
+            <div>
+              <div className="enc-archive-title">すれ違った男たち</div>
+              <div className="enc-archive-sub">出会った男の名をタップすると物語を再読できる</div>
             </div>
-          ))}
-        </div>
+            <button className="enc-archive-close" onClick={onClose}>✕</button>
+          </div>
+          <div className="enc-archive-count">
+            <span>{metCount} 人と出会った</span>
+            <span>残り {Math.max(0, totalCount-metCount)} 人</span>
+          </div>
+          <div className="enc-archive-scroll">
+            {categories.map(({cat,items})=>(
+              <div key={cat} className="enc-archive-cat-group">
+                <div className="enc-archive-cat-label">{cat}</div>
+                <div className="enc-archive-grid">
+                  {items.map(s=>{
+                    const met = viewedNums.includes(s.num);
+                    const isNew = met && lastNewNum===s.num;
+                    return (
+                      <div
+                        key={s.num}
+                        className={`enc-archive-card${met?" met":""}`}
+                        onClick={()=>handleCardClick(s, met)}
+                        title={met ? "タップして再読" : undefined}
+                      >
+                        {met
+                          ? <span className="enc-archive-card-name">{s.title}</span>
+                          : <span className="enc-archive-card-q">？</span>
+                        }
+                        {isNew && <span className="enc-archive-new">NEW</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>}
+
+        {/* ── 再読ビュー ── */}
+        {rereadStory && (
+          <div className="enc-archive-reread-overlay">
+            <div className="enc-archive-reread-header">
+              <button className="enc-archive-reread-back" onClick={()=>setRereadStory(null)}>
+                ← 一覧に戻る
+              </button>
+              <button className="enc-archive-close" onClick={onClose}>✕</button>
+            </div>
+            <div className="enc-archive-reread-body">
+              <div className="enc-archive-reread-num">NO.{String(rereadStory.num).padStart(2,"0")}</div>
+              <div className="enc-archive-reread-title">{rereadStory.title}</div>
+              <div className="enc-archive-reread-cat">{rereadStory.cat}</div>
+              <div className="enc-archive-reread-content">{rereadStory.text}</div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
