@@ -528,6 +528,20 @@ function Styles({site, lightMode}){
       padding:8px 16px; cursor:pointer; transition:.3s; border-radius:2px;
     }
     .enc-exit-btn:hover{ border-color:#888; color:var(--enc-accent); }
+    .enc-archive-btn{
+      position:absolute; top:22px; left:26px; z-index:50;
+      background:transparent; border:1px solid #2a2a2e; color:var(--enc-text-s);
+      font-family:var(--enc-font); font-size:11px; letter-spacing:.16em;
+      padding:8px 16px; cursor:pointer; transition:.3s; border-radius:2px;
+      display:inline-flex; align-items:center; gap:7px;
+    }
+    .enc-archive-btn:hover{ border-color:#888; color:var(--enc-accent); }
+    .enc-archive-btn-dot{
+      width:6px; height:6px; border-radius:50%; background:#e0c97a;
+      box-shadow:0 0 6px rgba(224,201,122,.8);
+      animation:encDotPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes encDotPulse{ 0%,100%{opacity:.5;} 50%{opacity:1;} }
     .enc-city-container{
       position:absolute; bottom:0; left:0; width:100%; height:300px; z-index:5;
       pointer-events:none; transition:opacity 1.5s ease, transform 3.0s cubic-bezier(.25,.1,.25,1);
@@ -587,11 +601,94 @@ function Styles({site, lightMode}){
     @keyframes encPulse{ 0%{opacity:.2;} 50%{opacity:.5;} 100%{opacity:.2;} }
     .enc-story-view::-webkit-scrollbar{ width:2px; }
     .enc-story-view::-webkit-scrollbar-thumb{ background:#333; }
+    /* 既読一覧（図鑑）モーダル */
+    .enc-archive-overlay{
+      position:fixed; inset:0; z-index:900;
+      background:rgba(0,0,0,.82);
+      display:flex; align-items:center; justify-content:center;
+      padding:32px 16px;
+      animation:encArchiveFadeIn .25s ease;
+    }
+    @keyframes encArchiveFadeIn{ from{opacity:0;} to{opacity:1;} }
+    .enc-archive-panel{
+      width:100%; max-width:980px; max-height:86vh;
+      background:#0a0a0c; border:1px solid #222;
+      border-radius:4px; overflow:hidden;
+      display:flex; flex-direction:column;
+      font-family:var(--enc-font); color:var(--enc-text-p);
+      box-shadow:0 20px 60px rgba(0,0,0,.6);
+    }
+    .enc-archive-header{
+      display:flex; align-items:flex-start; justify-content:space-between;
+      padding:32px 36px 20px; flex-shrink:0;
+    }
+    .enc-archive-title{
+      font-size:1.7rem; font-weight:500; letter-spacing:.3rem; color:#fff;
+    }
+    .enc-archive-sub{
+      font-size:.75rem; letter-spacing:.16em; color:var(--enc-text-s); margin-top:8px;
+    }
+    .enc-archive-close{
+      background:none; border:none; color:var(--enc-text-s);
+      font-size:18px; cursor:pointer; padding:4px 8px; transition:.2s;
+      line-height:1;
+    }
+    .enc-archive-close:hover{ color:#fff; }
+    .enc-archive-count{
+      display:flex; justify-content:space-between;
+      padding:0 36px 20px; border-bottom:1px solid #1c1c1f;
+      font-size:.78rem; letter-spacing:.1em; color:var(--enc-text-s);
+      flex-shrink:0;
+    }
+    .enc-archive-scroll{
+      overflow-y:auto; padding:24px 36px 40px; flex:1;
+    }
+    .enc-archive-scroll::-webkit-scrollbar{ width:3px; }
+    .enc-archive-scroll::-webkit-scrollbar-thumb{ background:#2a2a2e; }
+    .enc-archive-cat-group{ margin-bottom:34px; }
+    .enc-archive-cat-label{
+      font-size:.85rem; letter-spacing:.3rem; color:#ccc;
+      padding-bottom:10px; margin-bottom:16px; border-bottom:1px solid #1c1c1f;
+    }
+    .enc-archive-grid{
+      display:flex; flex-wrap:wrap; gap:10px;
+    }
+    .enc-archive-card{
+      position:relative;
+      min-width:84px; height:46px;
+      display:flex; align-items:center; justify-content:center;
+      border:1px solid #2a2a2e; border-radius:3px;
+      padding:0 12px;
+      font-size:.78rem; letter-spacing:.05em;
+      color:#4a4a4e;
+      background:rgba(255,255,255,.015);
+      transition:border-color .2s, color .2s;
+      white-space:nowrap;
+    }
+    .enc-archive-card.met{
+      color:#d8d4cc; border-color:#3a3a3e;
+      background:rgba(255,255,255,.03);
+    }
+    .enc-archive-card-q{ font-size:.95rem; color:#3a3a3e; }
+    .enc-archive-card-name{ font-weight:500; }
+    .enc-archive-new{
+      position:absolute; top:-9px; right:-8px;
+      background:#e0c97a; color:#1a1408;
+      font-family:sans-serif; font-size:8.5px; font-weight:700;
+      letter-spacing:.05em; padding:2px 6px; border-radius:8px;
+      box-shadow:0 0 8px rgba(224,201,122,.5);
+    }
     @media(max-width:680px){
       .enc-man-title{ font-size:1.7rem; letter-spacing:.2rem; }
       .enc-story-view{ padding:26px 22px; max-height:78vh; }
       .enc-story-content{ font-size:.98rem; line-height:2.3; }
       .enc-exit-btn{ top:16px; right:16px; padding:7px 13px; }
+      .enc-archive-btn{ top:16px; left:16px; padding:7px 12px; font-size:10px; }
+      .enc-archive-header{ padding:24px 20px 16px; }
+      .enc-archive-title{ font-size:1.3rem; letter-spacing:.18em; }
+      .enc-archive-count{ padding:0 20px 16px; }
+      .enc-archive-scroll{ padding:18px 20px 28px; }
+      .enc-archive-card{ min-width:70px; height:42px; font-size:.72rem; padding:0 8px; }
     }
     /* PROFILE */
     .profile-wrap{max-width:800px;margin:0 auto;padding:110px 48px 90px}
@@ -1432,6 +1529,8 @@ function EncounterPage({onExit}){
   const [cityHidden, setCityHidden] = useState(false);
   const [blackout, setBlackout] = useState(false);
   const [fadeOut, setFadeOut] = useState(false); // encounter-view / story-view の表示切替アニメ用
+  const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
+  const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
   const initializedRef = useRef(false);
 
   // Firestoreから進捗を読み込む
@@ -1483,10 +1582,11 @@ function EncounterPage({onExit}){
     setTimeout(()=>{
       setShowStory(true);
       setFadeOut(false);
-      if(current.num < 99){
+      if(current.num < 99 && !viewedNums.includes(current.num)){
         const next = [...new Set([...viewedNums, current.num])];
         setViewedNums(next);
         saveProgress(next);
+        setLastNewNum(current.num); // 今回新しく出会った男としてマーク（図鑑を閉じるまでNEW表示）
       }
     },600);
   };
@@ -1515,14 +1615,24 @@ function EncounterPage({onExit}){
     setBlackout(false);
     setViewedNums([]);
     saveProgress([]);
+    setLastNewNum(null);
     setCurrent(pickNext());
     setCityHidden(false);
     setCityShift(Math.floor(Math.random()*12)*25);
   };
 
+  const closeArchive = () => {
+    setShowArchive(false);
+    setLastNewNum(null); // 図鑑を閉じたらNEW表示はクリアする
+  };
+
   return (
     <div className="enc-root">
       <div className="enc-noise"/>
+      <button className="enc-archive-btn" onClick={()=>setShowArchive(true)}>
+        既読一覧
+        {lastNewNum!==null && <span className="enc-archive-btn-dot"/>}
+      </button>
       <button className="enc-exit-btn" onClick={onExit}>← 淵に戻る</button>
 
       <div className={`enc-city-container${cityHidden?" enc-city-hidden":""}`}
@@ -1569,6 +1679,71 @@ function EncounterPage({onExit}){
           最後の一篇となる。
         </div>
         <button className="enc-next-btn" style={{marginTop:"4rem"}} onClick={handleRestart}>最初から歩き直す</button>
+      </div>
+
+      {showArchive && (
+        <EncounterArchiveModal
+          viewedNums={viewedNums}
+          lastNewNum={lastNewNum}
+          onClose={closeArchive}
+        />
+      )}
+    </div>
+  );
+}
+
+// 既読一覧（図鑑）モーダル：カテゴリ別に99人を「？」グリッドで表示し、
+// 出会った男は名前を表示する。直近で新しく出会った男には「NEW」を付ける。
+function EncounterArchiveModal({viewedNums, lastNewNum, onClose}){
+  const categories = useMemo(()=>{
+    const order = [];
+    const map = new Map();
+    MOTOKO_STORIES.forEach(s=>{
+      if(s.num===99) return; // 「終わりの男」は図鑑には含めない
+      if(!map.has(s.cat)){ map.set(s.cat,[]); order.push(s.cat); }
+      map.get(s.cat).push(s);
+    });
+    return order.map(cat=>({cat, items:map.get(cat)}));
+  },[]);
+
+  const metCount = viewedNums.length;
+
+  return (
+    <div className="enc-archive-overlay" onClick={onClose}>
+      <div className="enc-archive-panel" onClick={e=>e.stopPropagation()}>
+        <div className="enc-archive-header">
+          <div>
+            <div className="enc-archive-title">すれ違った男たち</div>
+            <div className="enc-archive-sub">街で出会った記録</div>
+          </div>
+          <button className="enc-archive-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="enc-archive-count">
+          <span>{metCount} 人と出会った</span>
+          <span>残り {98-metCount} 人</span>
+        </div>
+        <div className="enc-archive-scroll">
+          {categories.map(({cat,items})=>(
+            <div key={cat} className="enc-archive-cat-group">
+              <div className="enc-archive-cat-label">{cat}</div>
+              <div className="enc-archive-grid">
+                {items.map(s=>{
+                  const met = viewedNums.includes(s.num);
+                  const isNew = met && lastNewNum===s.num;
+                  return (
+                    <div key={s.num} className={`enc-archive-card${met?" met":""}`}>
+                      {met
+                        ? <span className="enc-archive-card-name">{s.title}</span>
+                        : <span className="enc-archive-card-q">？</span>
+                      }
+                      {isNew && <span className="enc-archive-new">NEW</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
