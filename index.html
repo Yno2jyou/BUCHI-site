@@ -171,13 +171,6 @@ const MOTOKO_STORIES = [
   {num:99, cat:"終わり", title:"終わりの男", text:"九十九人目の男は、何もしない。\n\n彼はただ、そこに立っている。他の九十八人の物語をすべて聞き終え、それらを自分の中に静かに収納していく。彼が物語を受け取るたびに、その男たちは世界から一人ずつ消えていった。\n\n「次は、あなたの番ですか」と訊いた。\n\n「いいえ」と彼は言った。「私は、物語の終わりを見届けるためにだけ存在しています。九十九人が揃った時、世界は一つの大きな本になります。私は、その表紙を閉じる役割です」\n\n彼はゆっくりと私に背を向けた。彼の背中には、これまでの男たちの人生が、無数の傷跡のように刻まれていた。彼が歩き出すと、街の灯が一つずつ消え、静かな沈黙が訪れた。物語は、ここで終わる。"}
 ];
 
-// 幻の百人目「不在の男」。九十九人の記録には含まれず、すれ違いの抽選プールにも入らない。
-// 終わりの男（NO.99）の物語を読み終えた直後にだけ現れる、特別な最後の演出専用のデータ。
-const HUNDRED_MAN_STORY = {
-  num:100, cat:"終わり", title:"不在の男",
-  text:"百人目の男は、いなかった。いや、厳密にはそこにいるべき場所に、誰ひとりとして立っていなかった。九十九人の男たちの物語がすべて終わり、九十九人目の男が最後の頁を閉じたとき、舞台の上には静寂だけが残された。街の灯は消え、世界は深淵なる暗闇に包まれた。しかし、その漆黒の暗闇の中で、ふと何かが「開く」音がした。\n\n百人目の男は、登場人物ではない。彼は物語の輪郭の外側にいた。彼は物語を読み、それを見届け、そして最後にはこうして振り返っている「あなた」の近くにいる。朝の通勤電車の窓ガラスに映るぼんやりとした輪郭として。深夜、誰にも言えない秘密を反芻する瞬間の吐息として。あるいは、九十九人の男たちの誰にも感情移入できず、ただ彼らを冷ややかに、あるいは痛ましく見守っていたはずの、あなたの視線そのものとして。\n\n「世界は一つの本になった」と九十九人目の男は言った。ならば、その本を今、開いて読んでいるのは誰なのか。\n\n百人目の男は、何もしない。彼は物語に介入しない。ただ、読み終えた本の表紙をなぞり、そこに刻まれた九十九の傷跡——いや、九十九の「生」の重みを、自分の記憶の一部として引き受ける。\n\n物語の中の男たちは消えた。しかしその物語を読み終えてしまったという事実は、あなたの心に小さな、けれど決して消えることのない棘となって残る。\n\n物語は終わった。しかし本を閉じた後の世界は、閉じる前と同じままではないはずだ。\n\nあなたは閉じた本の表紙に自分の指紋を残した。その瞬間から、あなたもまた、この都市の物語の一部となる。百人目の男——それは、九十九人の断片をすべて飲み込み、それでもなお「明日」という新しい頁をめくり続ける、現実の此方にいるあなただ。\n\n本は閉じた。さあ、顔を上げてほしい。街の灯は、あなたが目を覚ますのを待っている。"
-};
-
 // ═══════════════ FIREBASE HELPERS ═══════════════
 const isDataUri = s => typeof s === "string" && s.startsWith("data:");
 
@@ -1599,7 +1592,6 @@ function EncounterPage({onExit, stories}){
   const [fadeOut, setFadeOut] = useState(false); // encounter-view / story-view の表示切替アニメ用
   const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
   const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
-  const [showHundred, setShowHundred] = useState(false); // 幻の百人目（不在の男）特別演出の表示状態
   const initializedRef = useRef(false);
   const viewedNumsRef = useRef([]); // 進捗読み込みが遅れても、その間に出会った男を見失わないようにするための最新値参照
   viewedNumsRef.current = viewedNums;
@@ -1663,11 +1655,11 @@ function EncounterPage({onExit, stories}){
 
   const handleNextMan = () => {
     if(current && current.num===99){
-      // 最後の男 → 幻の百人目（不在の男）の特別演出へ
+      // 最後の男 → ブラックアウト演出
       setFadeOut(true);
       setTimeout(()=>{
         setShowStory(false);
-        setShowHundred(true);
+        setBlackout(true);
       },1000);
       return;
     }
@@ -1681,15 +1673,8 @@ function EncounterPage({onExit, stories}){
     },500);
   };
 
-  const handleHundredContinue = () => {
-    // 百人目の演出（コンプリート表示まで）を見終えたら、最終のブラックアウト/再起動画面へ
-    setShowHundred(false);
-    setBlackout(true);
-  };
-
   const handleRestart = () => {
     setBlackout(false);
-    setShowHundred(false);
     setViewedNums([]);
     saveProgress([]);
     setLastNewNum(null);
@@ -1745,8 +1730,6 @@ function EncounterPage({onExit, stories}){
 
       <div className="enc-progress">{viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った</div>
 
-      {showHundred && <HundredManScene onContinue={handleHundredContinue}/>}
-
       <div className={`enc-blackout${blackout?" show":""}`}>
         <div style={{marginBottom:"2rem",opacity:.4,letterSpacing:".6rem",fontSize:".8rem"}}>NO.???</div>
         <h1 style={{fontSize:"1.8rem",fontWeight:500,marginBottom:"3rem",letterSpacing:".2rem"}}>これは、あなたの物語</h1>
@@ -1772,72 +1755,9 @@ function EncounterPage({onExit, stories}){
   );
 }
 
-// 幻の百人目「不在の男」演出。九十九人目の物語を読み終えた直後にだけ現れる。
-// じっとこちらを見つめるシルエットを背景に、最後の物語を段ごとに浮かび上がらせ、
-// 読み終えると「記録のコンプリート」と読者への敬意のメッセージへ遷移する。
-function HundredManScene({onContinue}){
-  const [textVisible, setTextVisible] = useState(false);
-  const [canFinish, setCanFinish] = useState(false);
-  const [showComplete, setShowComplete] = useState(false);
-  const paragraphs = useMemo(()=>HUNDRED_MAN_STORY.text.split("\n\n"),[]);
-
-  useEffect(()=>{
-    const t1 = setTimeout(()=>setTextVisible(true), 1300);
-    const t2 = setTimeout(()=>setCanFinish(true), 1300 + paragraphs.length*220 + 1100);
-    return ()=>{ clearTimeout(t1); clearTimeout(t2); };
-  },[paragraphs.length]);
-
-  return (
-    <div className="enc-hundred-root">
-      <div className="enc-hundred-vignette"/>
-      <svg className="enc-hundred-silhouette" viewBox="0 0 400 600" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-        <defs>
-          <radialGradient id="hmGlow" cx="50%" cy="34%" r="55%">
-            <stop offset="0%" stopColor="#1c1c1f"/>
-            <stop offset="100%" stopColor="#000" stopOpacity="0"/>
-          </radialGradient>
-        </defs>
-        <rect x="0" y="0" width="400" height="600" fill="url(#hmGlow)"/>
-        <g className="enc-hundred-figure">
-          <ellipse cx="200" cy="150" rx="66" ry="80" fill="#080809"/>
-          <path d="M 55 600 Q 55 372 200 350 Q 345 372 345 600 Z" fill="#080809"/>
-          <circle className="enc-hundred-eye" cx="175" cy="146" r="3.2"/>
-          <circle className="enc-hundred-eye" cx="225" cy="146" r="3.2"/>
-        </g>
-      </svg>
-
-      {!showComplete && (
-        <div className="enc-hundred-textwrap">
-          <span className="enc-hundred-label">幻の百人目</span>
-          <h2 className="enc-hundred-title">不在の男</h2>
-          <div className={`enc-hundred-story${textVisible?" show":""}`}>
-            {paragraphs.map((p,i)=>(
-              <p key={i} style={{transitionDelay:`${i*0.22+0.1}s`}}>{p}</p>
-            ))}
-          </div>
-          <div className="enc-hundred-btn-wrap">
-            {canFinish && (
-              <button className="enc-next-btn" onClick={()=>setShowComplete(true)}>本を閉じる</button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showComplete && (
-        <div className="enc-hundred-complete show">
-          <div className="enc-hundred-complete-label">RECORD COMPLETE</div>
-          <h1 className="enc-hundred-complete-title">記録のコンプリート</h1>
-          <p className="enc-hundred-complete-msg">
-            男たちの生き様を見届けた読者に、<br/>心からの敬意を。
-          </p>
-          <button className="enc-next-btn" onClick={onContinue}>顔を上げる</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
+// 既読一覧（図鑑）モーダル：カテゴリ別に99人を「？」グリッドで表示し、
+// 出会った男は名前を表示する。直近で新しく出会った男には「NEW」を付ける。
+function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose}){
   const categories = useMemo(()=>{
     const order = [];
     const map = new Map();
