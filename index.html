@@ -881,6 +881,15 @@ function Styles({site, lightMode}){
       .mobile-back-btn{display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--accent);font-family:var(--body);font-size:13px;letter-spacing:.08em;padding:0 0 20px;cursor:pointer}
       .nav-right{gap:5px}
       .nav-pill{padding:4px 10px;font-size:9px}
+      /* モバイルナビ：2段構造 */
+      .nav{height:auto;flex-wrap:wrap;padding:10px 16px 0;gap:0}
+      .nav-logo{flex:1;padding-bottom:10px}
+      .nav-right{padding-bottom:10px}
+      .nav-center{width:100%;border-top:1px solid var(--border);padding:6px 0;display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+      .nav-center::-webkit-scrollbar{display:none}
+      .nav-btn{font-size:10px;letter-spacing:.12em;padding:7px 14px;white-space:nowrap;flex-shrink:0}
+      /* ナビ分の高さ補正 */
+      .hero{padding-top:120px}
       /* 読書画面のモバイル最適化：文字を少し小さく、行間も読みやすく */
       .reading-nav{padding:0 14px;gap:10px}
       .reading-crumb{font-size:10px}
@@ -1273,25 +1282,17 @@ function useReadingProgress(){
 
 // ═══════════════ NAV ═══════════════
 function Nav({page, onNav, site, lightMode, onToggleLight, authed, onAdminClick, onLogout}){
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navItems = [
-    {id:"home", label:"作品一覧"},
-    {id:"hitorigoto", label:"ひとりごと"},
-    {id:"encounter", label:"九十九人の男たち"},
-    {id:"profile", label:"著者"},
-  ];
-  const goTo = (dest) => { setMobileMenuOpen(false); onNav(dest); };
-
   return(
     <nav className="nav">
-      <div className="nav-logo" onClick={()=>goTo("home")}>
+      <div className="nav-logo" onClick={()=>onNav("home")}>
         <div className="nav-logo-main">{site.name}</div>
         <div className="nav-logo-sub">{site.nameRoman}</div>
       </div>
       <div className="nav-center">
-        {navItems.map(item=>(
-          <button key={item.id} className={`nav-btn ${page===item.id?"active":""}`} onClick={()=>goTo(item.id)}>{item.label}</button>
-        ))}
+        <button className={`nav-btn ${page==="home"?"active":""}`} onClick={()=>onNav("home")}>作品一覧</button>
+        <button className={`nav-btn ${page==="hitorigoto"?"active":""}`} onClick={()=>onNav("hitorigoto")}>ひとりごと</button>
+        <button className={`nav-btn ${page==="encounter"?"active":""}`} onClick={()=>onNav("encounter")}>九十九人の男たち</button>
+        <button className={`nav-btn ${page==="profile"?"active":""}`} onClick={()=>onNav("profile")}>著者</button>
       </div>
       <div className="nav-right">
         <button className="nav-pill" onClick={onToggleLight}>
@@ -1310,20 +1311,7 @@ function Nav({page, onNav, site, lightMode, onToggleLight, authed, onAdminClick,
               管理 🔏
             </button>
         }
-        <button className={`nav-burger${mobileMenuOpen?" open":""}`} onClick={()=>setMobileMenuOpen(o=>!o)} aria-label="メニュー">
-          <span/><span/><span/>
-        </button>
       </div>
-      {mobileMenuOpen && (
-        <>
-          <div className="nav-mobile-backdrop" onClick={()=>setMobileMenuOpen(false)}/>
-          <div className="nav-mobile-menu">
-            {navItems.map(item=>(
-              <button key={item.id} className={`nav-mobile-item ${page===item.id?"active":""}`} onClick={()=>goTo(item.id)}>{item.label}</button>
-            ))}
-          </div>
-        </>
-      )}
     </nav>
   );
 }
