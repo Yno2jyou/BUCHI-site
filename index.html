@@ -212,13 +212,14 @@ function useStore() {
   const [author,  setAuthorLocal] = useState(DEFAULT_AUTHOR);
   const [novels,  setNovelsLocal] = useState([]);
   const [messages,setMsgLocal]    = useState([]);
+  const [motokoStories, setMotokoStoriesLocal] = useState(MOTOKO_STORIES);
   const [loading, setLoading]     = useState(true);
   const [dbError, setDbError]     = useState(null);
 
   useEffect(() => {
     const unsubs = [];
     let resolved = 0;
-    const check = () => { resolved++; if(resolved >= 4) setLoading(false); };
+    const check = () => { resolved++; if(resolved >= 5) setLoading(false); };
 
     unsubs.push(db.collection("settings").doc("site").onSnapshot(snap => {
       if (snap.exists) setSiteLocal(snap.data()); else setSiteLocal(DEFAULT_SITE);
@@ -237,6 +238,17 @@ function useStore() {
 
     unsubs.push(db.collection("messages").orderBy("createdAt","desc").onSnapshot(snap => {
       setMsgLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      check();
+    }, e => { setDbError(e.message); check(); }));
+
+    // 「すれ違い」(九十九人の男たち)の物語データ。Firestoreに保存がなければ
+    // コード内のデフォルト(MOTOKO_STORIES)をそのまま使う。
+    unsubs.push(db.collection("settings").doc("motokoStories").onSnapshot(snap => {
+      if (snap.exists && Array.isArray(snap.data().items)) {
+        setMotokoStoriesLocal(snap.data().items);
+      } else {
+        setMotokoStoriesLocal(MOTOKO_STORIES);
+      }
       check();
     }, e => { setDbError(e.message); check(); }));
 
@@ -344,10 +356,50 @@ function useStore() {
     try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
   };
 
+  // ───────── 「すれ違い」(九十九人の男たち) 物語データのCRUD ─────────
+  // num(表示順)は1〜98を常に詰め直し、「終わりの男」(num:99)は常に末尾に固定する。
+  const renumber = (list) => {
+    const ending = list.find(s => s.num === 99);
+    const rest = list.filter(s => s.num !== 99).map((s, i) => ({ ...s, num: i + 1 }));
+    return ending ? [...rest, { ...ending, num: 99 }] : rest;
+  };
+
+  const saveMotokoStories = useCallback(async (list) => {
+    const next = renumber(list);
+    setMotokoStoriesLocal(next);
+    try { await db.collection("settings").doc("motokoStories").set({ items: next }); }
+    catch(e) { console.error(e); }
+    return next;
+  }, []);
+
+  const updateMotokoStory = useCallback(async (num, patch) => {
+    const next = motokoStories.map(s => s.num===num ? {...s, ...patch} : s);
+    await saveMotokoStories(next);
+  }, [motokoStories, saveMotokoStories]);
+
+  const addMotokoStory = useCallback(async () => {
+    // 「終わりの男」の直前に新しい男を1人追加し、1〜99で詰め直す
+    const newOne = { num: 0, cat:"未分類", title:"新しい男", text:"ここに物語を書いてください。" };
+    const withoutEnding = motokoStories.filter(s=>s.num!==99);
+    const ending = motokoStories.find(s=>s.num===99);
+    const next = ending ? [...withoutEnding, newOne, ending] : [...withoutEnding, newOne];
+    const saved = await saveMotokoStories(next);
+    // 追加された人のnumを返す（直後に編集画面を開くため）
+    const added = saved[saved.length-2] || saved[saved.length-1];
+    return added.num;
+  }, [motokoStories, saveMotokoStories]);
+
+  const deleteMotokoStory = useCallback(async (num) => {
+    if(num===99) return; // 終わりの男は削除不可
+    const next = motokoStories.filter(s=>s.num!==num);
+    await saveMotokoStories(next);
+  }, [motokoStories, saveMotokoStories]);
+
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
     addMessage, deleteMessage, markRead,
     addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
-    addMurmur, deleteMurmur, updateMurmur };
+    addMurmur, deleteMurmur, updateMurmur,
+    motokoStories, updateMotokoStory, addMotokoStory, deleteMotokoStory };
 }
 
 // ═══════════════ HELPERS ═══════════════
@@ -1519,8 +1571,9 @@ function useAnonAuthUid(){
   return uid;
 }
 
-function EncounterPage({onExit}){
+function EncounterPage({onExit, stories}){
   const uid = useAnonAuthUid();
+  const motokoStories = stories && stories.length>0 ? stories : MOTOKO_STORIES;
   const [viewedNums, setViewedNums] = useState([]); // すれ違った男のnum一覧（99は除く）
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [current, setCurrent] = useState(null);
@@ -1559,13 +1612,13 @@ function EncounterPage({onExit}){
   },[uid]);
 
   const pickNext = useCallback(()=>{
-    if(viewedNums.length >= 98){
-      return MOTOKO_STORIES.find(s=>s.num===99);
+    if(viewedNums.length >= motokoStories.filter(s=>s.num!==99).length){
+      return motokoStories.find(s=>s.num===99) || motokoStories[motokoStories.length-1];
     }
-    const pool = MOTOKO_STORIES.filter(s=>s.num<99 && !viewedNums.includes(s.num));
-    const usable = pool.length>0 ? pool : MOTOKO_STORIES.filter(s=>s.num<99);
+    const pool = motokoStories.filter(s=>s.num<99 && !viewedNums.includes(s.num));
+    const usable = pool.length>0 ? pool : motokoStories.filter(s=>s.num<99);
     return usable[Math.floor(Math.random()*usable.length)];
-  },[viewedNums]);
+  },[viewedNums, motokoStories]);
 
   // 初回ロード時に最初の男を提示
   useEffect(()=>{
@@ -1666,7 +1719,7 @@ function EncounterPage({onExit}){
         )}
       </div>
 
-      <div className="enc-progress">{viewedNums.length} / 98 人とすれ違った</div>
+      <div className="enc-progress">{viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った</div>
 
       <div className={`enc-blackout${blackout?" show":""}`}>
         <div style={{marginBottom:"2rem",opacity:.4,letterSpacing:".6rem",fontSize:".8rem"}}>NO.???</div>
@@ -1683,6 +1736,7 @@ function EncounterPage({onExit}){
 
       {showArchive && (
         <EncounterArchiveModal
+          stories={motokoStories}
           viewedNums={viewedNums}
           lastNewNum={lastNewNum}
           onClose={closeArchive}
@@ -1694,18 +1748,19 @@ function EncounterPage({onExit}){
 
 // 既読一覧（図鑑）モーダル：カテゴリ別に99人を「？」グリッドで表示し、
 // 出会った男は名前を表示する。直近で新しく出会った男には「NEW」を付ける。
-function EncounterArchiveModal({viewedNums, lastNewNum, onClose}){
+function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose}){
   const categories = useMemo(()=>{
     const order = [];
     const map = new Map();
-    MOTOKO_STORIES.forEach(s=>{
+    (stories||[]).forEach(s=>{
       if(s.num===99) return; // 「終わりの男」は図鑑には含めない
       if(!map.has(s.cat)){ map.set(s.cat,[]); order.push(s.cat); }
       map.get(s.cat).push(s);
     });
     return order.map(cat=>({cat, items:map.get(cat)}));
-  },[]);
+  },[stories]);
 
+  const totalCount = (stories||[]).filter(s=>s.num!==99).length;
   const metCount = viewedNums.length;
 
   return (
@@ -1720,7 +1775,7 @@ function EncounterArchiveModal({viewedNums, lastNewNum, onClose}){
         </div>
         <div className="enc-archive-count">
           <span>{metCount} 人と出会った</span>
-          <span>残り {98-metCount} 人</span>
+          <span>残り {Math.max(0, totalCount-metCount)} 人</span>
         </div>
         <div className="enc-archive-scroll">
           {categories.map(({cat,items})=>(
@@ -1851,10 +1906,13 @@ function MurmurEditList({murmurs, onUpdate, onDelete}){
 // ═══════════════ ADMIN ═══════════════
 function AdminPanel({store,onClose}){
   const {site,setSite,author,setAuthor,novels,messages,deleteMessage,markRead,
-    addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,addMurmur,deleteMurmur,updateMurmur}=store;
+    addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,addMurmur,deleteMurmur,updateMurmur,
+    motokoStories,updateMotokoStory,addMotokoStory,deleteMotokoStory}=store;
   const [sec,setSec]=useState("site");
   const [editNid,setEditNid]=useState(null);
   const [editCh,setEditCh]=useState(null);
+  const [editMotokoNum,setEditMotokoNum]=useState(null); // すれ違い：編集中の男のnum
+  const [motokoFilter,setMotokoFilter]=useState(""); // すれ違い管理：検索フィルタ
   const [delConfirm,setDelConfirm]=useState(null);
   const [saved,setSaved]=useState(false);
   const [murmurErr,setMurmurErr]=useState("");
@@ -1889,6 +1947,7 @@ function AdminPanel({store,onClose}){
     {id:"author",label:"著者プロフィール",icon:"✍️"},
     {id:"links",label:"SNS・リンク",icon:"🔗"},
     {id:"hitorigoto",label:"ひとりごと管理",icon:"💬"},
+    {id:"motoko",label:"すれ違い管理",icon:"🚶"},
     {id:"messages",label:"受信メッセージ",icon:"✉️",badge:unread},
     {id:"theme",label:"デザイン・テーマ",icon:"🎨"},
     {id:"novels",label:"作品管理",icon:"📚"},
@@ -1897,7 +1956,7 @@ function AdminPanel({store,onClose}){
   const [menuSelected, setMenuSelected] = useState(false);
 
   const selectSec = (id) => {
-    setSec(id); setEditNid(null); setEditCh(null);
+    setSec(id); setEditNid(null); setEditCh(null); setEditMotokoNum(null);
     setMenuSelected(true);
   };
   const goBackToMenu = () => setMenuSelected(false);
@@ -1921,6 +1980,14 @@ function AdminPanel({store,onClose}){
               <span className="admin-nav-label">編集中</span>
               <button className={`admin-nav-item ${sec==="novel_edit"?"active":""}`} onClick={()=>{ setSec("novel_edit"); setMenuSelected(true); }}>
                 📝 {eNov?.title||"作品"}
+              </button>
+            </div>
+          )}
+          {editMotokoNum&&sec==="motoko"&&(
+            <div className="admin-nav-group">
+              <span className="admin-nav-label">編集中</span>
+              <button className="admin-nav-item active" onClick={()=>setMenuSelected(true)}>
+                🚶 {(motokoStories||[]).find(x=>x.num===editMotokoNum)?.title||"男"}
               </button>
             </div>
           )}
@@ -2035,6 +2102,83 @@ function AdminPanel({store,onClose}){
             <MurmurEditList murmurs={author.murmurs||[]} onUpdate={updateMurmur} onDelete={deleteMurmur}/>
           </div>
         )}
+
+        {sec==="motoko"&&!editMotokoNum&&(()=>{
+          const sorted=[...(motokoStories||[])].sort((a,b)=>a.num-b.num);
+          const filtered=motokoFilter.trim()
+            ? sorted.filter(s=>s.title.includes(motokoFilter)||s.cat.includes(motokoFilter)||s.text.includes(motokoFilter))
+            : sorted;
+          return(
+            <div className="fadein">
+              <div className="admin-title">すれ違い管理（九十九人の男たち）</div>
+              <div style={{marginBottom:16,fontSize:12,color:"var(--txt3)"}}>
+                「すれ違い」タブで表示される物語を編集できます。並び順（番号）は追加・削除のたびに自動で詰め直されます。「終わりの男」は常に末尾固定で削除できません。
+              </div>
+              <div className="form-group" style={{marginBottom:20}}>
+                <input className="form-input" placeholder="タイトル・カテゴリ・本文で検索…" value={motokoFilter} onChange={e=>setMotokoFilter(e.target.value)}/>
+              </div>
+              <div className="alist">
+                {filtered.length===0&&<div style={{padding:"24px",color:"var(--txt3)",fontSize:13}}>該当する男がいません</div>}
+                {filtered.map(s=>(
+                  <div key={s.num} className="arow">
+                    <div className="arow-top">
+                      <div className="arow-dot" style={{background:s.num===99?"#ef4444":"var(--accent)",flexShrink:0}}/>
+                      <div className="arow-info">
+                        <div className="arow-title">
+                          <span style={{fontFamily:"var(--serif)",fontSize:11,color:"var(--txt3)",marginRight:8}}>NO.{String(s.num).padStart(2,"0")}</span>
+                          {s.title}
+                          {s.num===99&&<span style={{fontSize:10,marginLeft:8,color:"#ef4444",letterSpacing:".08em"}}>固定</span>}
+                        </div>
+                        <div className="arow-meta">{s.cat} · {s.text.replace(/\s/g,"").length}字</div>
+                      </div>
+                    </div>
+                    <div className="arow-actions">
+                      <button className="icon-btn primary" onClick={()=>setEditMotokoNum(s.num)}>✏️ 編集</button>
+                      <button className="icon-btn danger" disabled={s.num===99} style={{opacity:s.num===99?.3:1,cursor:s.num===99?"not-allowed":"pointer"}}
+                        onClick={()=>s.num!==99&&setDelConfirm({type:"motoko",num:s.num,label:s.title})}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button className="btn btn-primary" onClick={async()=>{ const num=await addMotokoStory(); setEditMotokoNum(num); }}>＋ 新しい男を追加</button>
+            </div>
+          );
+        })()}
+
+        {sec==="motoko"&&editMotokoNum&&(()=>{
+          const s=(motokoStories||[]).find(x=>x.num===editMotokoNum);
+          if(!s) return null;
+          return(
+            <div className="fadein">
+              <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:32}}>
+                <button className="back-link" onClick={()=>setEditMotokoNum(null)}>← 一覧へ</button>
+                <div className="admin-title" style={{margin:0}}>NO.{String(s.num).padStart(2,"0")} {s.title}</div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">タイトル</label>
+                  <BufferedInput key={s.num+":title"} className="form-input" value={s.title} onCommit={v=>updateMotokoStory(s.num,{title:v})}/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">カテゴリ</label>
+                  <BufferedInput key={s.num+":cat"} className="form-input" value={s.cat} onCommit={v=>updateMotokoStory(s.num,{cat:v})} disabled={s.num===99}/>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">本文</label>
+                <BufferedTextarea key={s.num+":text"} className="form-textarea" value={s.text} onCommit={v=>updateMotokoStory(s.num,{text:v})} rows={20} style={{fontFamily:"'Noto Serif JP',serif",fontSize:14,lineHeight:2}}/>
+                <div className="form-hint">段落の区切りは空行（Enterキー2回）。改行は \n として保存されます。</div>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button className="btn btn-primary" onClick={()=>flash()}>保存する</button>
+                {saved&&<span style={{lineHeight:"38px",fontSize:12,color:"var(--accent)"}}>✓ 保存しました</span>}
+                {s.num!==99&&(
+                  <button className="btn btn-danger" style={{marginLeft:"auto"}} onClick={()=>setDelConfirm({type:"motoko",num:s.num,label:s.title})}>この男を削除</button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {sec==="messages"&&(
           <div className="fadein">
@@ -2249,6 +2393,7 @@ function AdminPanel({store,onClose}){
               <button className="btn btn-danger" onClick={()=>{
                 if(delConfirm.type==="novel"){ deleteNovel(delConfirm.id); setSec("novels"); setEditNid(null); setMenuSelected(true); }
                 if(delConfirm.type==="chapter"){ deleteChapter(delConfirm.nid,delConfirm.id); setSec("novel_edit"); }
+                if(delConfirm.type==="motoko"){ deleteMotokoStory(delConfirm.num); setEditMotokoNum(null); }
                 setDelConfirm(null);
               }}>削除する</button>
             </div>
@@ -2579,7 +2724,7 @@ function App(){
         )}
         {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={novels} onOpen={openNovel}/>}
         {!loading&&!dbError&&!adminOpen&&page==="hitorigoto"&&<HitorigotoPage author={author}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="encounter"&&<EncounterPage onExit={()=>nav("home")}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="encounter"&&<EncounterPage onExit={()=>nav("home")} stories={store.motokoStories}/>}
         {!loading&&!dbError&&!adminOpen&&page==="detail"&&liveNovel&&<DetailPage novel={liveNovel} onBack={()=>nav("home")} onRead={openChapter} onSendMessage={addMessage}/>}
         {!loading&&!dbError&&!adminOpen&&page==="reading"&&liveNovel&&chapterId&&<ReadingPage novel={liveNovel} chapterId={chapterId} onBack={()=>nav("detail")} onChapter={setChapterId} lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}/>}
         {!loading&&!dbError&&!adminOpen&&page==="profile"&&<ProfilePage author={author} novels={novels} onToWorks={()=>nav("home")} site={site} onSendMessage={addMessage}/>}
