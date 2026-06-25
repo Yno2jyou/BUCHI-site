@@ -1752,8 +1752,7 @@ function EncounterPage({onExit, stories}){
   const [showStory, setShowStory] = useState(false);
   const [cityShift, setCityShift] = useState(0);
   const [cityHidden, setCityHidden] = useState(false);
-  const [show100, setShow100] = useState(false);       // 幻の100人目シーケンス
-  const [fadeOut, setFadeOut] = useState(false);
+  const [show100, setShow100] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [lastNewNum, setLastNewNum] = useState(null);
   const initializedRef = useRef(false);
@@ -1800,37 +1799,25 @@ function EncounterPage({onExit, stories}){
   const handleShowStory = () => {
     if(!current) return;
     setCityHidden(true);
-    setFadeOut(true);
-    setTimeout(()=>{
-      setShowStory(true);
-      setFadeOut(false);
-      if(current.num < 99 && !viewedNums.includes(current.num)){
-        const next = [...new Set([...viewedNums, current.num])];
-        setViewedNums(next);
-        saveProgress(next);
-        setLastNewNum(current.num);
-      }
-    },600);
+    setShowStory(true);
+    if(current.num < 99 && !viewedNums.includes(current.num)){
+      const next = [...new Set([...viewedNums, current.num])];
+      setViewedNums(next);
+      saveProgress(next);
+      setLastNewNum(current.num);
+    }
   };
 
   const handleNextMan = () => {
     if(current && current.num===99){
-      // 最後の男 → 暗転後に幻の100人目シーケンスへ
-      setFadeOut(true);
-      setTimeout(()=>{
-        setShowStory(false);
-        setShow100(true);
-      },1000);
+      setShowStory(false);
+      setShow100(true);
       return;
     }
-    setFadeOut(true);
-    setTimeout(()=>{
-      setShowStory(false);
-      setCityHidden(false);
-      setCityShift(Math.floor(Math.random()*12)*25);
-      setCurrent(pickNext());
-      setFadeOut(false);
-    },500);
+    setShowStory(false);
+    setCityHidden(false);
+    setCityShift(Math.floor(Math.random()*12)*25);
+    setCurrent(pickNext());
   };
 
   const handleRestart = () => {
@@ -1870,7 +1857,7 @@ function EncounterPage({onExit, stories}){
 
       <div className="enc-container">
         {!showStory && current && (
-          <div className="enc-view" onClick={handleShowStory} style={{opacity:fadeOut?0:1}}>
+          <div className="enc-view" onClick={handleShowStory}>
             <span className="enc-label">すれ違った男</span>
             <h1 className="enc-man-title">{current.title}</h1>
             <p className="enc-hint">— 立ち止まり、物語を覗く —</p>
@@ -1878,7 +1865,7 @@ function EncounterPage({onExit, stories}){
         )}
 
         {showStory && current && (
-          <div className={`enc-story-view${!fadeOut?" show":""}`} style={{opacity:fadeOut?0:undefined}}>
+          <div className="enc-story-view show">
             <div className="enc-story-header">
               <div>
                 <span className="enc-story-num">NO.{String(current.num).padStart(2,"0")}</span>
