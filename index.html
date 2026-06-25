@@ -1744,102 +1744,85 @@ const ABSENT_MAN_TEXT = `百人目の男は、いなかった。
 さあ、顔を上げてほしい。
 街の灯は、あなたが目を覚ますのを待っている。`;
 
+const LS_KEY = "enc_viewed_nums";
+function loadViewed(){ try{ const v=localStorage.getItem(LS_KEY); return v?JSON.parse(v):[]; }catch(e){ return []; } }
+function saveViewed(nums){ try{ localStorage.setItem(LS_KEY,JSON.stringify(nums)); }catch(e){} }
+
 function EncounterPage({onExit, stories}){
-  const uid = useAnonAuthUid();
-  const motokoStories = stories && stories.length>0 ? stories : MOTOKO_STORIES;
-  const [viewedNums, setViewedNums] = useState([]);
-  const [current, setCurrent] = useState(null);
-  const [showStory, setShowStory] = useState(false);
-  const [cityShift, setCityShift] = useState(0);
-  const [cityHidden, setCityHidden] = useState(false);
-  const [show100, setShow100] = useState(false);
-  const [showArchive, setShowArchive] = useState(false);
-  const [lastNewNum, setLastNewNum] = useState(null);
-  const initializedRef = useRef(false);
-  const viewedNumsRef = useRef([]);
-  viewedNumsRef.current = viewedNums;
+  const motokoStories = (stories && stories.length>0) ? stories : MOTOKO_STORIES;
+  const storiesRef = React.useRef(motokoStories);
+  storiesRef.current = motokoStories;
 
-  const pickNext = useCallback((nums)=>{
-    const usedNums = nums!==undefined ? nums : viewedNumsRef.current;
-    if(usedNums.length >= motokoStories.filter(s=>s.num!==99).length){
-      return motokoStories.find(s=>s.num===99) || motokoStories[motokoStories.length-1];
-    }
-    const pool = motokoStories.filter(s=>s.num<99 && !usedNums.includes(s.num));
-    const usable = pool.length>0 ? pool : motokoStories.filter(s=>s.num<99);
-    return usable[Math.floor(Math.random()*usable.length)];
-  },[motokoStories]);
+  const [viewedNums, setViewedNums] = React.useState(loadViewed);
+  const [current, setCurrent]       = React.useState(null);
+  const [showStory, setShowStory]   = React.useState(false);
+  const [cityShift, setCityShift]   = React.useState(0);
+  const [cityHidden, setCityHidden] = React.useState(false);
+  const [show100, setShow100]       = React.useState(false);
+  const [showArchive, setShowArchive] = React.useState(false);
+  const [lastNewNum, setLastNewNum] = React.useState(null);
 
-  useEffect(()=>{
-    if(initializedRef.current) return;
-    initializedRef.current = true;
-    setCurrent(pickNext([]));
+  // 初回マウント時に1回だけ最初の男を選ぶ
+  React.useEffect(()=>{
+    const st = storiesRef.current;
+    const viewed = loadViewed();
+    const pool = st.filter(s=>s.num<99 && !viewed.includes(s.num));
+    const usable = pool.length>0 ? pool : st.filter(s=>s.num<99);
+    if(usable.length>0) setCurrent(usable[Math.floor(Math.random()*usable.length)]);
     setCityShift(Math.floor(Math.random()*12)*25);
-  },[pickNext]);
+  },[]); // eslint-disable-line
 
-  useEffect(()=>{
-    if(!uid) return;
-    let mounted = true;
-    db.collection("encounterProgress").doc(uid).get().then(snap=>{
-      if(!mounted) return;
-      if(snap.exists && Array.isArray(snap.data().viewedNums)){
-        setViewedNums(snap.data().viewedNums);
-      }
-    }).catch(e=>console.error(e));
-    return ()=>{ mounted=false; };
-  },[uid]);
+  const pickNext = (viewed)=>{
+    const st = storiesRef.current;
+    const v = viewed !== undefined ? viewed : loadViewed();
+    if(v.length >= st.filter(s=>s.num!==99).length){
+      return st.find(s=>s.num===99) || st[st.length-1];
+    }
+    const pool = st.filter(s=>s.num<99 && !v.includes(s.num));
+    const usable = pool.length>0 ? pool : st.filter(s=>s.num<99);
+    return usable[Math.floor(Math.random()*usable.length)];
+  };
 
-  const saveProgress = useCallback((nums)=>{
-    if(!uid) return;
-    db.collection("encounterProgress").doc(uid).set({
-      viewedNums: nums,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }).catch(e=>console.error(e));
-  },[uid]);
-
-  const handleShowStory = () => {
+  const handleShowStory = ()=>{
     if(!current) return;
+    const num = current.num;
     setCityHidden(true);
     setShowStory(true);
-    if(current.num < 99 && !viewedNums.includes(current.num)){
-      const next = [...new Set([...viewedNums, current.num])];
+    if(num < 99 && !viewedNums.includes(num)){
+      const next = [...viewedNums, num];
       setViewedNums(next);
-      saveProgress(next);
-      setLastNewNum(current.num);
+      saveViewed(next);
+      setLastNewNum(num);
     }
   };
 
-  const handleNextMan = () => {
+  const handleNextMan = ()=>{
     if(current && current.num===99){
       setShowStory(false);
       setShow100(true);
       return;
     }
+    const viewed = viewedNums;
+    const next = pickNext(viewed);
     setShowStory(false);
     setCityHidden(false);
     setCityShift(Math.floor(Math.random()*12)*25);
-    setCurrent(pickNext());
+    setCurrent(next);
   };
 
-  const handleRestart = () => {
+  const handleRestart = ()=>{
     setShow100(false);
     setViewedNums([]);
-    saveProgress([]);
+    saveViewed([]);
     setLastNewNum(null);
-    setCurrent(pickNext([]));
     setCityHidden(false);
     setCityShift(Math.floor(Math.random()*12)*25);
+    const st = storiesRef.current;
+    const pool = st.filter(s=>s.num<99);
+    setCurrent(pool[Math.floor(Math.random()*pool.length)]);
   };
 
-  const closeArchive = () => {
-    setShowArchive(false);
-    setLastNewNum(null);
-  };
-
-  // 瞳の光点：ランダムに2点配置（シルエットの顔のあたり）
-  const eyePositions = useMemo(()=>[
-    {top:"28%", left:"48%"},
-    {top:"28%", left:"52%"},
-  ],[]);
+  const eyePositions = [{top:"28%",left:"48%"},{top:"28%",left:"52%"}];
 
   return (
     <div className="enc-root">
@@ -1851,7 +1834,7 @@ function EncounterPage({onExit, stories}){
       <button className="enc-exit-btn" onClick={onExit}>← 淵に戻る</button>
 
       <div className={`enc-city-container${cityHidden?" enc-city-hidden":""}`}
-        style={{transform:`translateX(-${cityShift}%)`}}>
+           style={{transform:`translateX(-${cityShift}%)`}}>
         <div className="enc-city-silhouette"/>
       </div>
 
@@ -1863,7 +1846,6 @@ function EncounterPage({onExit, stories}){
             <p className="enc-hint">— 立ち止まり、物語を覗く —</p>
           </div>
         )}
-
         {showStory && current && (
           <div className="enc-story-view show">
             <div className="enc-story-header">
@@ -1881,12 +1863,12 @@ function EncounterPage({onExit, stories}){
         )}
       </div>
 
-      <div className="enc-progress">{viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った</div>
+      <div className="enc-progress">
+        {viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った
+      </div>
 
-      {/* ── 幻の百人目（不在の男）シーケンス：show100のときだけマウント ── */}
       {show100 && (
         <div className="enc-100-root show">
-          {/* シルエット */}
           <div className="enc-100-silhouette">
             <svg viewBox="0 0 200 420" xmlns="http://www.w3.org/2000/svg" fill="#fff">
               <ellipse cx="100" cy="52" rx="28" ry="32"/>
@@ -1897,13 +1879,11 @@ function EncounterPage({onExit, stories}){
               <rect x="104" y="268" width="26" height="140" rx="6"/>
             </svg>
           </div>
-          {/* 瞳の光点 */}
           <div className="enc-100-eyes">
             {eyePositions.map((pos,i)=>(
-              <div key={i} className="enc-100-eye" style={{top:pos.top, left:pos.left, animationDelay:`${i*0.3}s`}}/>
+              <div key={i} className="enc-100-eye" style={{top:pos.top,left:pos.left,animationDelay:`${i*0.3}s`}}/>
             ))}
           </div>
-          {/* テキストコンテンツ */}
           <div className="enc-100-content">
             <div className="enc-100-num">NO.100 — 不在の男</div>
             <h2 className="enc-100-title">百人目の男は、<br/>いなかった。</h2>
@@ -1928,7 +1908,7 @@ function EncounterPage({onExit, stories}){
           stories={motokoStories}
           viewedNums={viewedNums}
           lastNewNum={lastNewNum}
-          onClose={closeArchive}
+          onClose={()=>{ setShowArchive(false); setLastNewNum(null); }}
         />
       )}
     </div>
