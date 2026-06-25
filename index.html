@@ -1668,6 +1668,7 @@ function EncounterPage({onExit, stories}){
   const [cityShift, setCityShift] = useState(0);
   const [cityHidden, setCityHidden] = useState(false);
   const [blackout, setBlackout] = useState(false);
+  const [metEndingMan, setMetEndingMan] = useState(false); // 99人目「終わりの男」を読み終えたか（進捗表示用。viewedNums/pickNextのロジックには影響しない）
   // blackoutStage: "silence"（無音の暗闇）→ "absent"（不在の男、本文が浮かび上がる）→ "complete"（記録のコンプリートと敬意）
   const [blackoutStage, setBlackoutStage] = useState("silence");
   const [absentParaIdx, setAbsentParaIdx] = useState(-1); // 浮かび上がった段落数（-1=まだ何も）
@@ -1732,6 +1733,9 @@ function EncounterPage({onExit, stories}){
         setViewedNums(next);
         saveProgress(next);
         setLastNewNum(current.num); // 今回新しく出会った男としてマーク（図鑑を閉じるまでNEW表示）
+      }
+      if(current.num === 99){
+        setMetEndingMan(true); // 99人目（終わりの男）に到達 → 進捗表示を99/99にするためのフラグ
       }
     },600);
   };
@@ -1815,7 +1819,9 @@ function EncounterPage({onExit, stories}){
     setBlackout(false);
     setBlackoutStage("silence");
     setAbsentParaIdx(-1);
+    setFadeOut(false); // ブラックアウト演出中にtrueになったままだったのを戻す（街だけ見えて男が表示されない不具合の修正）
     setViewedNums([]);
+    setMetEndingMan(false);
     saveProgress([]);
     setLastNewNum(null);
     setCurrent(pickNext([]));
@@ -1868,7 +1874,7 @@ function EncounterPage({onExit, stories}){
         )}
       </div>
 
-      <div className="enc-progress">{viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った</div>
+      <div className="enc-progress">{viewedNums.length + (metEndingMan?1:0)} / {motokoStories.length} 人とすれ違った</div>
 
       <div className={`enc-blackout${blackout?" show":""}`} onClick={handleSkipBlackoutStage}>
         {blackoutStage==="silence" && (
