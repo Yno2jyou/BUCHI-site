@@ -1896,49 +1896,45 @@ function EncounterPage({onExit, stories}){
 
       <div className="enc-progress">{viewedNums.length} / {motokoStories.filter(s=>s.num!==99).length} 人とすれ違った</div>
 
-      {/* ── 幻の百人目（不在の男）シーケンス ── */}
-      <div className={`enc-100-root${show100?" show":""}`}>
-        {/* シルエット */}
-        <div className="enc-100-silhouette">
-          <svg viewBox="0 0 200 420" xmlns="http://www.w3.org/2000/svg" fill="#fff">
-            {/* 頭 */}
-            <ellipse cx="100" cy="52" rx="28" ry="32"/>
-            {/* 首・肩・胴 */}
-            <path d="M84 82 C74 96 54 108 46 140 L46 270 L154 270 L154 140 C146 108 126 96 116 82 Z"/>
-            {/* 左腕 */}
-            <path d="M46 140 C38 160 30 190 28 230 L48 234 C50 200 56 172 64 150 Z"/>
-            {/* 右腕 */}
-            <path d="M154 140 C162 160 170 190 172 230 L152 234 C150 200 144 172 136 150 Z"/>
-            {/* 脚 */}
-            <rect x="70" y="268" width="26" height="140" rx="6"/>
-            <rect x="104" y="268" width="26" height="140" rx="6"/>
-          </svg>
-        </div>
-        {/* 瞳の光点 */}
-        <div className="enc-100-eyes">
-          {eyePositions.map((pos,i)=>(
-            <div key={i} className="enc-100-eye" style={{top:pos.top, left:pos.left, animationDelay:`${i*0.3}s`}}/>
-          ))}
-        </div>
-        {/* テキストコンテンツ */}
-        <div className="enc-100-content">
-          <div className="enc-100-num">NO.100 — 不在の男</div>
-          <h2 className="enc-100-title">百人目の男は、<br/>いなかった。</h2>
-          <div className="enc-100-rule"/>
-          <div className="enc-100-text">{ABSENT_MAN_TEXT}</div>
-          {/* コンプリートバナー */}
-          <div className="enc-100-complete">
-            <div className="enc-100-complete-badge">✦ ALL RECORDS COMPLETE ✦</div>
-            <div className="enc-100-complete-msg">
-              九十九人の男たちの生き様を、最後まで見届けてくれた。<br/>
-              その眼差しに、心からの敬意を。
-            </div>
+      {/* ── 幻の百人目（不在の男）シーケンス：show100のときだけマウント ── */}
+      {show100 && (
+        <div className="enc-100-root show">
+          {/* シルエット */}
+          <div className="enc-100-silhouette">
+            <svg viewBox="0 0 200 420" xmlns="http://www.w3.org/2000/svg" fill="#fff">
+              <ellipse cx="100" cy="52" rx="28" ry="32"/>
+              <path d="M84 82 C74 96 54 108 46 140 L46 270 L154 270 L154 140 C146 108 126 96 116 82 Z"/>
+              <path d="M46 140 C38 160 30 190 28 230 L48 234 C50 200 56 172 64 150 Z"/>
+              <path d="M154 140 C162 160 170 190 172 230 L152 234 C150 200 144 172 136 150 Z"/>
+              <rect x="70" y="268" width="26" height="140" rx="6"/>
+              <rect x="104" y="268" width="26" height="140" rx="6"/>
+            </svg>
           </div>
-          <button className="enc-100-btn" onClick={handleRestart}>
-            もう一度、街を歩く
-          </button>
+          {/* 瞳の光点 */}
+          <div className="enc-100-eyes">
+            {eyePositions.map((pos,i)=>(
+              <div key={i} className="enc-100-eye" style={{top:pos.top, left:pos.left, animationDelay:`${i*0.3}s`}}/>
+            ))}
+          </div>
+          {/* テキストコンテンツ */}
+          <div className="enc-100-content">
+            <div className="enc-100-num">NO.100 — 不在の男</div>
+            <h2 className="enc-100-title">百人目の男は、<br/>いなかった。</h2>
+            <div className="enc-100-rule"/>
+            <div className="enc-100-text">{ABSENT_MAN_TEXT}</div>
+            <div className="enc-100-complete">
+              <div className="enc-100-complete-badge">✦ ALL RECORDS COMPLETE ✦</div>
+              <div className="enc-100-complete-msg">
+                九十九人の男たちの生き様を、最後まで見届けてくれた。<br/>
+                その眼差しに、心からの敬意を。
+              </div>
+            </div>
+            <button className="enc-100-btn" onClick={handleRestart}>
+              もう一度、街を歩く
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {showArchive && (
         <EncounterArchiveModal
