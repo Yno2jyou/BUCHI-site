@@ -452,7 +452,7 @@ function Styles({site, lightMode}){
   const navBg = lightMode?"rgba(245,240,232,.92)":"rgba(7,7,15,.9)";
   const mix=lightMode?"aaa":"888";
   return React.createElement('style',null,`
-    :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg}}
+    :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg};--nav-h:60px}
     html{scroll-behavior:smooth}body{background:var(--bg);overflow-x:hidden}
     .app{min-height:100vh;background:var(--bg);color:var(--txt);font-family:var(--body)}
     .nav{position:relative;z-index:10}.hero{position:relative;z-index:10}.section{position:relative;z-index:10}.detail-body{position:relative;z-index:10}.reading-wrap{position:relative;z-index:10}
@@ -470,7 +470,7 @@ function Styles({site, lightMode}){
     .nav-pill-admin:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
     .nav-pill-logout{color:var(--txt3)}.nav-pill-logout:hover{border-color:var(--border-hi);color:var(--txt2)}
     /* HERO */
-    .hero{padding:130px 48px 80px;max-width:960px;margin:0 auto}
+    .hero{padding:calc(var(--nav-h) + 70px) 48px 80px;max-width:960px;margin:0 auto}
     .hero-eyebrow{margin-bottom:28px}.hero-line{width:28px;height:1px;background:var(--accent);display:inline-block;vertical-align:middle;margin-right:12px}
     .hero-label{font-size:9px;letter-spacing:.44em;color:var(--txt3);text-transform:uppercase;vertical-align:middle}
     .hero-title{font-family:var(--serif);font-size:clamp(46px,9vw,100px);font-weight:300;line-height:.94;letter-spacing:-.02em;color:var(--txt);margin-bottom:32px}
@@ -506,7 +506,7 @@ function Styles({site, lightMode}){
     .nc-author{font-size:11px;color:var(--txt3)}.nc-words{font-size:10px;color:var(--txt3)}
     .no-results{padding:80px 0;text-align:center;color:var(--txt3);font-size:14px;letter-spacing:.1em;grid-column:1/-1}
     /* DETAIL */
-    .detail-hero{height:420px;position:relative;overflow:hidden;margin-top:60px}
+    .detail-hero{height:420px;position:relative;overflow:hidden;margin-top:var(--nav-h)}
     .detail-hero-bg{position:absolute;inset:0}.detail-hero-fade{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(7,7,15,.2),var(--bg) 100%)}
     .detail-hero-content{position:absolute;bottom:52px;left:0;right:0;max-width:800px;margin:0 auto;padding:0 48px}
     .detail-genre{font-size:9px;letter-spacing:.4em;color:var(--accent);text-transform:uppercase;margin-bottom:12px}
@@ -540,7 +540,7 @@ function Styles({site, lightMode}){
     .reading-foot-btn:hover{border-color:var(--accent);color:var(--accent)}.reading-foot-btn:disabled{opacity:.22;cursor:not-allowed}
     .reading-foot-pos{font-family:var(--serif);font-size:14px;color:var(--txt3)}
     /* HITORIGOTO */
-    .htg-wrap{max-width:800px;margin:0 auto;padding:110px 48px 80px}
+    .htg-wrap{max-width:800px;margin:0 auto;padding:calc(var(--nav-h) + 50px) 48px 80px}
     .htg-header{margin-bottom:48px}
     .htg-eyebrow{font-size:9px;letter-spacing:.44em;color:var(--txt3);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:10px}
     .htg-eyebrow::before{content:'';display:inline-block;width:22px;height:1px;background:var(--accent)}
@@ -807,7 +807,7 @@ function Styles({site, lightMode}){
       .enc-archive-card{ min-width:70px; height:42px; font-size:.72rem; padding:0 8px; }
     }
     /* PROFILE */
-    .profile-wrap{max-width:800px;margin:0 auto;padding:110px 48px 90px}
+    .profile-wrap{max-width:800px;margin:0 auto;padding:calc(var(--nav-h) + 50px) 48px 90px}
     .profile-avatar{width:110px;height:110px;background:var(--raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:44px;font-weight:300;color:var(--accent);flex-shrink:0;overflow:hidden}
     .profile-header{display:flex;gap:40px;align-items:flex-start;margin-bottom:56px;padding-bottom:56px;border-bottom:1px solid var(--border);flex-wrap:wrap}
     .profile-name-en{font-size:9px;letter-spacing:.36em;color:var(--txt3);text-transform:uppercase;margin-bottom:7px}
@@ -932,9 +932,9 @@ function Styles({site, lightMode}){
     @keyframes fadein{from{opacity:0}to{opacity:1}}.fadein{animation:fadein .3s ease forwards}
     ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border-hi)}
     @media(max-width:680px){
-      .nav{padding:0 16px}.hero{padding:100px 20px 60px}.section,.detail-body{padding-left:20px;padding-right:20px}
+      .nav{padding:0 16px}.hero{padding:calc(var(--nav-h) + 40px) 20px 60px}.section,.detail-body{padding-left:20px;padding-right:20px}
       .detail-hero-content{padding:0 20px}.reading-content{padding-left:20px;padding-right:20px;padding-top:72px}.reading-foot{padding-left:20px;padding-right:20px}
-      .profile-wrap,.htg-wrap{padding:100px 20px 72px}.footer{padding:32px 20px}
+      .profile-wrap,.htg-wrap{padding:calc(var(--nav-h) + 30px) 20px 72px}.footer{padding:32px 20px}
       .admin-overlay{flex-direction:column}
       .admin-sidebar{width:100%;max-height:none;height:100%}
       .admin-main{display:none;padding:20px 16px 120px}
@@ -952,8 +952,6 @@ function Styles({site, lightMode}){
       .nav-center{width:100%;border-top:1px solid var(--border);padding:6px 0;display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
       .nav-center::-webkit-scrollbar{display:none}
       .nav-btn{font-size:10px;letter-spacing:.12em;padding:7px 14px;white-space:nowrap;flex-shrink:0}
-      /* ナビ分の高さ補正 */
-      .hero{padding-top:120px}
       /* 読書画面のモバイル最適化：文字を少し小さく、行間も読みやすく */
       .reading-nav{padding:0 14px;gap:10px}
       .reading-crumb{font-size:10px}
@@ -1346,8 +1344,26 @@ function useReadingProgress(){
 
 // ═══════════════ NAV ═══════════════
 function Nav({page, onNav, site, lightMode, onToggleLight, authed, onAdminClick, onLogout}){
+  const navRef = useRef(null);
+
+  // ナビの実際の高さ（モバイルでは2段に折り返ったり、ログイン状態でボタン数が
+  // 変わって高さが変動する）をCSS変数 --nav-h に反映し、各ページ側はこの
+  // 変数を基準に上部の余白を取ることで、ナビとの重なり・見切れを防ぐ。
+  useEffect(()=>{
+    const el = navRef.current;
+    if(!el) return;
+    const apply = () => {
+      document.documentElement.style.setProperty("--nav-h", `${el.offsetHeight}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    window.addEventListener("resize", apply);
+    return () => { ro.disconnect(); window.removeEventListener("resize", apply); };
+  },[authed]);
+
   return(
-    <nav className="nav">
+    <nav className="nav" ref={navRef}>
       <div className="nav-logo" onClick={()=>onNav("home")}>
         <div className="nav-logo-main">{site.name}</div>
         <div className="nav-logo-sub">{site.nameRoman}</div>
