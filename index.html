@@ -1863,9 +1863,16 @@ function EncounterPage({onExit, stories}){
 
   // 図鑑（既読一覧）で出会った男の名前をタップ → その物語を直接開いて読み返す。
   // 通常の「すれ違い」フローとは独立しており、viewedNums/進捗/ブラックアウト演出には一切影響しない。
+  // 読み返しを終えたときに元の状態（街 or 物語）へ戻せるよう、開始前の表示状態を退避しておく。
+  const preRereadStateRef = useRef(null);
   const handleRereadMan = (num) => {
     const target = motokoStories.find(s=>s.num===num);
     if(!target) return;
+    if(!isRereading){
+      // すでに読み返し中の別の男から、図鑑経由でさらに別の男へ移る場合は、
+      // 一番最初に読み返しに入る直前の状態を保持し続ける（上書きしない）。
+      preRereadStateRef.current = { current, showStory, cityHidden };
+    }
     setShowArchive(false);
     setLastNewNum(null);
     setIsRereading(true);
@@ -1875,16 +1882,20 @@ function EncounterPage({onExit, stories}){
     setFadeOut(false);
   };
 
-  // 読み返しを終えて、通常の「すれ違い」の流れに戻る。
+  // 読み返しを終えて、図鑑（既読一覧）モーダルに戻る。
   const handleCloseReread = () => {
     setFadeOut(true);
     setTimeout(()=>{
+      const prev = preRereadStateRef.current;
       setIsRereading(false);
-      setShowStory(false);
-      setCityHidden(false);
-      setCityShift(Math.floor(Math.random()*12)*25);
-      setCurrent(pickNext());
+      if(prev){
+        setCurrent(prev.current);
+        setShowStory(prev.showStory);
+        setCityHidden(prev.cityHidden);
+      }
+      preRereadStateRef.current = null;
       setFadeOut(false);
+      setShowArchive(true); // 読み返し前にいた図鑑ページへ戻る
     },500);
   };
 
@@ -1923,7 +1934,7 @@ function EncounterPage({onExit, stories}){
             {isRereading && <div className="enc-reread-badge">既読一覧からの読み返し</div>}
             <div className="enc-story-content">{current.text}</div>
             <button className="enc-next-btn" onClick={isRereading ? handleCloseReread : handleNextMan}>
-              {isRereading ? "街に戻る" : (current.num===99 ? "物語の終わりへ" : "街に戻り、別の男とすれ違う")}
+              {isRereading ? "図鑑に戻る" : (current.num===99 ? "物語の終わりへ" : "街に戻り、別の男とすれ違う")}
             </button>
           </div>
         )}
