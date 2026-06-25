@@ -1859,6 +1859,7 @@ function EncounterPage({onExit, stories}){
   const closeArchive = () => {
     setShowArchive(false);
     setLastNewNum(null); // 図鑑を閉じたらNEW表示はクリアする
+    setFadeOut(false); // 図鑑を閉じたら、背後の場面（街 or 物語）をゆっくりフェードインで見せる
   };
 
   // 図鑑（既読一覧）で出会った男の名前をタップ → その物語を直接開いて読み返す。
@@ -1873,18 +1874,21 @@ function EncounterPage({onExit, stories}){
       // 一番最初に読み返しに入る直前の状態を保持し続ける（上書きしない）。
       preRereadStateRef.current = { current, showStory, cityHidden };
     }
-    setShowArchive(false);
     setLastNewNum(null);
     setIsRereading(true);
-    setCityHidden(true);
-    setCurrent(target);
-    setShowStory(true);
-    setFadeOut(false);
+    setFadeOut(true); // 背後のコンテンツを見えない状態にしてから切り替える（唐突な切り替わりを防ぐ）
+    setTimeout(()=>{
+      setCityHidden(true);
+      setCurrent(target);
+      setShowStory(true);
+      setShowArchive(false); // この時点ではまだ見えない状態なので、図鑑を閉じてもフラッシュしない
+      setTimeout(()=> setFadeOut(false), 80); // ここからゆっくりフェードインが始まる
+    }, 280);
   };
 
   // 読み返しを終えて、図鑑（既読一覧）モーダルに戻る。
   const handleCloseReread = () => {
-    setFadeOut(true);
+    setFadeOut(true); // 読み返していた物語をゆっくりフェードアウト
     setTimeout(()=>{
       const prev = preRereadStateRef.current;
       setIsRereading(false);
@@ -1894,9 +1898,12 @@ function EncounterPage({onExit, stories}){
         setCityHidden(prev.cityHidden);
       }
       preRereadStateRef.current = null;
-      setFadeOut(false);
+      // fadeOutはtrueのまま保つ＝背後のコンテンツは見えない状態。
+      // ここで見える状態に戻すと、図鑑モーダルがフェードインする裏で
+      // 読み返し前の男の背景が一瞬透けて見えてしまう（フラッシュバック）。
+      // 見える状態への復帰は、図鑑が実際に閉じられるとき（closeArchive）に行う。
       setShowArchive(true); // 読み返し前にいた図鑑ページへ戻る
-    },500);
+    },700);
   };
 
   return (
