@@ -1882,7 +1882,15 @@ function EncounterPage({onExit, stories}){
       setCurrent(target);
       setShowStory(true);
       setShowArchive(false); // この時点ではまだ見えない状態なので、図鑑を閉じてもフラッシュしない
-      setTimeout(()=> setFadeOut(false), 80); // ここからゆっくりフェードインが始まる
+      // 「非表示状態」が一度ブラウザに描画されたことを確実に待ってからフェードインを始める。
+      // 固定時間のsetTimeoutだと描画タイミングによってカクついて見えることがあるため、
+      // 二重のrequestAnimationFrameで「次の描画が完了した直後」を確実に捉える
+      // （図鑑に戻るときのcloseArchiveと同じ、単発のフェードイン指示にするための仕組み）。
+      requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+          setFadeOut(false); // ここから、図鑑に戻るときと同じ仕組みでゆっくりフェードインする
+        });
+      });
     }, 280);
   };
 
