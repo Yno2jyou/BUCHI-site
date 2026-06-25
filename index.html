@@ -731,6 +731,11 @@ function Styles({site, lightMode}){
       animation:encArchiveFadeIn .25s ease;
     }
     @keyframes encArchiveFadeIn{ from{opacity:0;} to{opacity:1;} }
+    .enc-archive-overlay.closing{
+      animation:encArchiveFadeOut .25s ease forwards;
+      pointer-events:none;
+    }
+    @keyframes encArchiveFadeOut{ from{opacity:1;} to{opacity:0;} }
     .enc-archive-panel{
       width:100%; max-width:980px; max-height:86vh;
       background:#0a0a0c; border:1px solid #222;
@@ -1701,6 +1706,7 @@ function EncounterPage({onExit, stories}){
   const blackoutTimersRef = useRef([]);
   const [fadeOut, setFadeOut] = useState(false); // encounter-view / story-view の表示切替アニメ用
   const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
+  const [archiveClosing, setArchiveClosing] = useState(false); // 図鑑モーダルが閉じるアニメーション中か（開く時と対称な0.25秒フェードアウト）
   const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
   const [isRereading, setIsRereading] = useState(false); // 図鑑から既読の男を選んで読み返している最中か
   const initializedRef = useRef(false);
@@ -1877,11 +1883,13 @@ function EncounterPage({onExit, stories}){
     setLastNewNum(null);
     setIsRereading(true);
     setFadeOut(true); // 背後のコンテンツを見えない状態にしてから切り替える（唐突な切り替わりを防ぐ）
+    setArchiveClosing(true); // 図鑑モーダルを、開く時と対称な0.25秒のフェードアウトで閉じる
     setTimeout(()=>{
+      setShowArchive(false);
+      setArchiveClosing(false); // フェードアウトが完了し、モーダルは既に見えなくなっている
       setCityHidden(true);
       setCurrent(target);
       setShowStory(true);
-      setShowArchive(false); // この時点ではまだ見えない状態なので、図鑑を閉じてもフラッシュしない
       // 「非表示状態」が一度ブラウザに描画されたことを確実に待ってからフェードインを始める。
       // 固定時間のsetTimeoutだと描画タイミングによってカクついて見えることがあるため、
       // 二重のrequestAnimationFrameで「次の描画が完了した直後」を確実に捉える
@@ -1891,7 +1899,7 @@ function EncounterPage({onExit, stories}){
           setFadeOut(false); // ここから、図鑑に戻るときと同じ仕組みでゆっくりフェードインする
         });
       });
-    }, 280);
+    }, 250); // 図鑑モーダルのフェードアウト(0.25s)に合わせる
   };
 
   // 読み返しを終えて、図鑑（既読一覧）モーダルに戻る。
