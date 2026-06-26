@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>淵</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -729,11 +729,6 @@ function Styles({site, lightMode}){
       display:flex; align-items:center; justify-content:center;
       padding:32px 16px;
       animation:encArchiveFadeIn .25s ease;
-      transition:opacity .65s ease;
-    }
-    .enc-archive-overlay.fading-out{
-      opacity:0;
-      pointer-events:none;
     }
     @keyframes encArchiveFadeIn{ from{opacity:0;} to{opacity:1;} }
     .enc-archive-panel{
@@ -1706,7 +1701,6 @@ function EncounterPage({onExit, stories}){
   const blackoutTimersRef = useRef([]);
   const [fadeOut, setFadeOut] = useState(false); // encounter-view / story-view の表示切替アニメ用
   const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
-  const [archiveFadingOut, setArchiveFadingOut] = useState(false); // 図鑑モーダルのフェードアウト演出中
   const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
   const [isRereading, setIsRereading] = useState(false); // 図鑑から既読の男を選んで読み返している最中か
   const initializedRef = useRef(false);
@@ -1864,7 +1858,6 @@ function EncounterPage({onExit, stories}){
 
   const closeArchive = () => {
     setShowArchive(false);
-    setArchiveFadingOut(false); // フェードアウト演出フラグをリセット
     setLastNewNum(null); // 図鑑を閉じたらNEW表示はクリアする
     setFadeOut(false); // 図鑑を閉じたら、背後の場面（街 or 物語）をゆっくりフェードインで見せる
   };
@@ -1883,28 +1876,22 @@ function EncounterPage({onExit, stories}){
     }
     setLastNewNum(null);
     setIsRereading(true);
-
-    // 図鑑に戻るときと同じ流れ：まず図鑑モーダルをフェードアウト（650ms）してから物語を開く。
-    setArchiveFadingOut(true);
+    setFadeOut(true); // 背後のコンテンツを見えない状態にしてから切り替える（唐突な切り替わりを防ぐ）
     setTimeout(()=>{
-      setShowArchive(false);
-      setArchiveFadingOut(false);
-      // 背後のコンテンツを非表示にしてから切り替える（唐突な切り替わりを防ぐ）
-      setFadeOut(true);
-      setTimeout(()=>{
-        setCityHidden(true);
-        setCurrent(target);
-        setShowStory(true);
-        // 「非表示状態」が一度ブラウザに描画されたことを確実に待ってからフェードインを始める。
-        // 二重のrequestAnimationFrameで「次の描画が完了した直後」を確実に捉える
-        // （図鑑に戻るときのcloseArchiveと同じ、単発のフェードイン指示にするための仕組み）。
+      setCityHidden(true);
+      setCurrent(target);
+      setShowStory(true);
+      setShowArchive(false); // この時点ではまだ見えない状態なので、図鑑を閉じてもフラッシュしない
+      // 「非表示状態」が一度ブラウザに描画されたことを確実に待ってからフェードインを始める。
+      // 固定時間のsetTimeoutだと描画タイミングによってカクついて見えることがあるため、
+      // 二重のrequestAnimationFrameで「次の描画が完了した直後」を確実に捉える
+      // （図鑑に戻るときのcloseArchiveと同じ、単発のフェードイン指示にするための仕組み）。
+      requestAnimationFrame(()=>{
         requestAnimationFrame(()=>{
-          requestAnimationFrame(()=>{
-            setFadeOut(false); // ここから、図鑑に戻るときと同じ仕組みでゆっくりフェードインする
-          });
+          setFadeOut(false); // ここから、図鑑に戻るときと同じ仕組みでゆっくりフェードインする
         });
-      }, 80);
-    }, 650);
+      });
+    }, 280);
   };
 
   // 読み返しを終えて、図鑑（既読一覧）モーダルに戻る。
@@ -2020,7 +2007,6 @@ function EncounterPage({onExit, stories}){
           lastNewNum={lastNewNum}
           onClose={closeArchive}
           onReread={handleRereadMan}
-          fadingOut={archiveFadingOut}
         />
       )}
     </div>
@@ -2029,7 +2015,7 @@ function EncounterPage({onExit, stories}){
 
 // 既読一覧（図鑑）モーダル：カテゴリ別に99人を「？」グリッドで表示し、
 // 出会った男は名前を表示する。直近で新しく出会った男には「NEW」を付ける。
-function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose, onReread, fadingOut}){
+function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose, onReread}){
   const categories = useMemo(()=>{
     const order = [];
     const map = new Map();
@@ -2045,7 +2031,7 @@ function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose, onRere
   const metCount = viewedNums.length;
 
   return (
-    <div className={`enc-archive-overlay${fadingOut?" fading-out":""}`} onClick={!fadingOut?onClose:undefined}>
+    <div className="enc-archive-overlay" onClick={onClose}>
       <div className="enc-archive-panel" onClick={e=>e.stopPropagation()}>
         <div className="enc-archive-header">
           <div>
