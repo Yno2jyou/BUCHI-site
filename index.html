@@ -729,13 +729,13 @@ function Styles({site, lightMode}){
       display:flex; align-items:center; justify-content:center;
       padding:32px 16px;
       animation:encArchiveFadeIn .25s ease;
+      transition:opacity .65s ease;
     }
-    @keyframes encArchiveFadeIn{ from{opacity:0;} to{opacity:1;} }
-    .enc-archive-overlay.closing{
-      animation:encArchiveFadeOut .25s ease forwards;
+    .enc-archive-overlay.fading-out{
+      opacity:0;
       pointer-events:none;
     }
-    @keyframes encArchiveFadeOut{ from{opacity:1;} to{opacity:0;} }
+    @keyframes encArchiveFadeIn{ from{opacity:0;} to{opacity:1;} }
     .enc-archive-panel{
       width:100%; max-width:980px; max-height:86vh;
       background:#0a0a0c; border:1px solid #222;
@@ -1706,7 +1706,7 @@ function EncounterPage({onExit, stories}){
   const blackoutTimersRef = useRef([]);
   const [fadeOut, setFadeOut] = useState(false); // encounter-view / story-view の表示切替アニメ用
   const [showArchive, setShowArchive] = useState(false); // 既読一覧（図鑑）モーダルの表示状態
-  const [archiveClosing, setArchiveClosing] = useState(false); // 図鑑モーダルが閉じるアニメーション中か（開く時と対称な0.25秒フェードアウト）
+  const [archiveFadingOut, setArchiveFadingOut] = useState(false); // 図鑑モーダルのフェードアウト演出中
   const [lastNewNum, setLastNewNum] = useState(null); // 直近で新しく出会った男のnum（図鑑を閉じるとクリアされる）
   const [isRereading, setIsRereading] = useState(false); // 図鑑から既読の男を選んで読み返している最中か
   const initializedRef = useRef(false);
@@ -1864,6 +1864,7 @@ function EncounterPage({onExit, stories}){
 
   const closeArchive = () => {
     setShowArchive(false);
+    setArchiveFadingOut(false); // フェードアウト演出フラグをリセット
     setLastNewNum(null); // 図鑑を閉じたらNEW表示はクリアする
     setFadeOut(false); // 図鑑を閉じたら、背後の場面（街 or 物語）をゆっくりフェードインで見せる
   };
@@ -1882,24 +1883,28 @@ function EncounterPage({onExit, stories}){
     }
     setLastNewNum(null);
     setIsRereading(true);
-    setFadeOut(true); // 背後のコンテンツを見えない状態にしてから切り替える（唐突な切り替わりを防ぐ）
-    setArchiveClosing(true); // 図鑑モーダルを、開く時と対称な0.25秒のフェードアウトで閉じる
+
+    // 図鑑に戻るときと同じ流れ：まず図鑑モーダルをフェードアウト（650ms）してから物語を開く。
+    setArchiveFadingOut(true);
     setTimeout(()=>{
       setShowArchive(false);
-      setArchiveClosing(false); // フェードアウトが完了し、モーダルは既に見えなくなっている
-      setCityHidden(true);
-      setCurrent(target);
-      setShowStory(true);
-      // 「非表示状態」が一度ブラウザに描画されたことを確実に待ってからフェードインを始める。
-      // 固定時間のsetTimeoutだと描画タイミングによってカクついて見えることがあるため、
-      // 二重のrequestAnimationFrameで「次の描画が完了した直後」を確実に捉える
-      // （図鑑に戻るときのcloseArchiveと同じ、単発のフェードイン指示にするための仕組み）。
-      requestAnimationFrame(()=>{
+      setArchiveFadingOut(false);
+      // 背後のコンテンツを非表示にしてから切り替える（唐突な切り替わりを防ぐ）
+      setFadeOut(true);
+      setTimeout(()=>{
+        setCityHidden(true);
+        setCurrent(target);
+        setShowStory(true);
+        // 「非表示状態」が一度ブラウザに描画されたことを確実に待ってからフェードインを始める。
+        // 二重のrequestAnimationFrameで「次の描画が完了した直後」を確実に捉える
+        // （図鑑に戻るときのcloseArchiveと同じ、単発のフェードイン指示にするための仕組み）。
         requestAnimationFrame(()=>{
-          setFadeOut(false); // ここから、図鑑に戻るときと同じ仕組みでゆっくりフェードインする
+          requestAnimationFrame(()=>{
+            setFadeOut(false); // ここから、図鑑に戻るときと同じ仕組みでゆっくりフェードインする
+          });
         });
-      });
-    }, 250); // 図鑑モーダルのフェードアウト(0.25s)に合わせる
+      }, 80);
+    }, 650);
   };
 
   // 読み返しを終えて、図鑑（既読一覧）モーダルに戻る。
@@ -2015,6 +2020,7 @@ function EncounterPage({onExit, stories}){
           lastNewNum={lastNewNum}
           onClose={closeArchive}
           onReread={handleRereadMan}
+          fadingOut={archiveFadingOut}
         />
       )}
     </div>
@@ -2023,7 +2029,7 @@ function EncounterPage({onExit, stories}){
 
 // 既読一覧（図鑑）モーダル：カテゴリ別に99人を「？」グリッドで表示し、
 // 出会った男は名前を表示する。直近で新しく出会った男には「NEW」を付ける。
-function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose, onReread}){
+function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose, onReread, fadingOut}){
   const categories = useMemo(()=>{
     const order = [];
     const map = new Map();
@@ -2039,7 +2045,7 @@ function EncounterArchiveModal({stories, viewedNums, lastNewNum, onClose, onRere
   const metCount = viewedNums.length;
 
   return (
-    <div className="enc-archive-overlay" onClick={onClose}>
+    <div className={`enc-archive-overlay${fadingOut?" fading-out":""}`} onClick={!fadingOut?onClose:undefined}>
       <div className="enc-archive-panel" onClick={e=>e.stopPropagation()}>
         <div className="enc-archive-header">
           <div>
