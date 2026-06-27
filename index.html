@@ -609,74 +609,112 @@ function rectsOverlap(a, b){
 // ノードの位置（円アイコン自体）は著者が配置した意味のある情報なので動かさず、
 // 「ラベルをどちら向きにずらすか」だけを調整することで重なりを避ける。
 function layoutGraphLabels({characters, relations, px, py, nodeRadius=24}){
-  const placedBoxes = []; // これまでに確定した「これ以上重ねてはいけない」矩形の一覧
+  // 障害物リスト（ノード円 + 確定済みラベル矩形）
+  const obstacles = [];
   const nodePos = {};
 
-  // ① まずすべてのノード（アイコン）自体を、動かせない障害物として確保する
+  // ① ノード円を障害物として登録
   characters.forEach(c=>{
     const cx=px(c.x), cy=py(c.y);
     nodePos[c.id] = {cx, cy};
-    placedBoxes.push({x:cx-nodeRadius, y:cy-nodeRadius, w:nodeRadius*2, h:nodeRadius*2});
+    // 円の代わりに少し大きめの矩形で近似（ラベルが円に被らないよう余裕を持たせる）
+    const r = nodeRadius + 4;
+    obstacles.push({x:cx-r, y:cy-r, w:r*2, h:r*2});
   });
 
-  // ② 各ノードの名前ラベルを、重ならない位置に配置する（下→上→右→左→斜めの順に候補を試す）
+  // 矩形の重なり判定（マージンつき）
+  function overlaps(box, margin=2){
+    return obstacles.some(o=>
+      box.x < o.x+o.w+margin && box.x+box.w > o.x-margin &&
+      box.y < o.y+o.h+margin && box.y+box.h > o.y-margin
+    );
+  }
+  // 矩形同士の最近距離（重なっている場合は0）
+  function minDist(box){
+    let d = Infinity;
+    for(const o of obstacles){
+      const dx = Math.max(0, Math.max(o.x-(box.x+box.w), box.x-(o.x+o.w)));
+      const dy = Math.max(0, Math.max(o.y-(box.y+box.h), box.y-(o.y+o.h)));
+      d = Math.min(d, Math.hypot(dx,dy));
+    }
+    return d;
+  }
+
+  // ② ノード名ラベルを配置する
+  // 8方向 × 複数距離の候補を生成し、重ならない最も近い位置を選ぶ
   const nodeRender = characters.map(c=>{
     const {cx,cy} = nodePos[c.id];
-    const labelW = Math.max(26, (c.name||"").length * 14);
-    const labelH = 18;
-    const candidates = [
-      {x:cx-labelW/2, y:cy+nodeRadius+10},                          // 下（デフォルト）
-      {x:cx-labelW/2, y:cy-nodeRadius-10-labelH},                    // 上
-      {x:cx+nodeRadius+12, y:cy-labelH/2},                           // 右
-      {x:cx-nodeRadius-12-labelW, y:cy-labelH/2},                    // 左
-      {x:cx-labelW/2, y:cy+nodeRadius+10+labelH+8},                  // さらに下
-      {x:cx+nodeRadius+12, y:cy+nodeRadius+10},                      // 右下
-      {x:cx-nodeRadius-12-labelW, y:cy+nodeRadius+10},               // 左下
-      {x:cx+nodeRadius+12, y:cy-nodeRadius-10-labelH},               // 右上
-      {x:cx-nodeRadius-12-labelW, y:cy-nodeRadius-10-labelH},        // 左上
-      {x:cx-labelW/2, y:cy+nodeRadius+10+(labelH+8)*2},             // さらにさらに下
-      {x:cx-labelW/2, y:cy-nodeRadius-10-(labelH+8)*2},             // さらにさらに上
-      {x:cx+nodeRadius+12+labelW+6, y:cy-labelH/2},                  // さらに右
-      {x:cx-nodeRadius-12-(labelW+6)*2, y:cy-labelH/2},              // さらに左
+    const lw = Math.max(28, (c.name||"").length * 14);
+    const lh = 18;
+    // 8方向の角度と基準オフセット
+    const dirs = [
+      [0,1],[0,-1],[1,0],[-1,0],
+      [0.7,0.7],[-0.7,0.7],[0.7,-0.7],[-0.7,-0.7]
     ];
-    // 候補の中から「重なりが発生しないもの」を優先して選び、すべて重なる場合は
-    // 重なりの個数が最も少ない候補（＝もっとも見え方が崩れにくい候補）にフォールバックする
-    let chosen = candidates[0], bestOverlapCount = Infinity;
-    for(const cand of candidates){
-      const box={x:cand.x,y:cand.y,w:labelW,h:labelH};
-      const overlapCount = placedBoxes.filter(p=>rectsOverlap(p,box)).length;
-      if(overlapCount===0){ chosen=cand; bestOverlapCount=0; break; }
-      if(overlapCount<bestOverlapCount){ chosen=cand; bestOverlapCount=overlapCount; }
+    const baseD = nodeRadius + 8;
+    let best = null, bestScore = -Infinity;
+    for(const [dx,dy] of dirs){
+      for(const dist of [baseD, baseD+lh+6, baseD+(lh+6)*2]){
+        const bx = cx + dx*dist - lw/2;
+        const by = cy + dy*dist - lh/2;
+        const box = {x:bx, y:by, w:lw, h:lh};
+        if(!overlaps(box)){
+          // 重ならないなら距離スコア最大（最も近い位置を優先）
+          const score = 1000 - dist;
+          if(score > bestScore){ bestScore=score; best=box; }
+        } else {
+          // 重なる場合は最も重なりが少ない（最近距離が大きい）候補を保持
+          const score = minDist(box) - 1000;
+          if(score > bestScore){ bestScore=score; best=box; }
+        }
+      }
     }
-    placedBoxes.push({x:chosen.x,y:chosen.y,w:labelW,h:labelH});
-    return { id:c.id, cx, cy, labelCx: chosen.x+labelW/2, labelCy: chosen.y+labelH/2+4 };
+    if(!best){ best = {x:cx-lw/2, y:cy+nodeRadius+8, w:lw, h:lh}; }
+    obstacles.push(best);
+    return { id:c.id, cx, cy, labelCx: best.x+lw/2, labelCy: best.y+lh/2+4 };
   });
 
-  // ③ 関係線のラベルを、重ならない位置に配置する（線の中点から垂直方向に少しずつずらして候補を試す）
+  // ③ 関係線ラベルを配置する
+  // 線上の3点（25%・50%・75%）× 直交方向±複数オフセットの候補から最適を選ぶ
   const edgeRender = relations.map(r=>{
     const a=nodePos[r.fromId], b=nodePos[r.toId];
     if(!a||!b) return { ...r, show:false };
     const x1=a.cx, y1=a.cy, x2=b.cx, y2=b.cy;
-    if(!r.label){
-      return { ...r, show:true, x1,y1,x2,y2, hasLabel:false };
-    }
-    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    if(!r.label) return { ...r, show:true, x1,y1,x2,y2, hasLabel:false };
+
     const dx=x2-x1, dy=y2-y1;
     const len=Math.max(1, Math.hypot(dx,dy));
-    const nx=-dy/len, ny=dx/len; // 線に直交する単位ベクトル
-    const labelW = Math.max(22, r.label.length * 11);
-    const labelH = 18;
-    let chosen = {x:mx-labelW/2, y:my-labelH/2}, bestOverlapCount=Infinity;
-    for(let i=0;i<16;i++){
-      const offset = i===0 ? 0 : Math.ceil(i/2)*20*(i%2===0?1:-1);
-      const lx=mx+nx*offset, ly=my+ny*offset;
-      const box={x:lx-labelW/2, y:ly-labelH/2, w:labelW, h:labelH};
-      const overlapCount = placedBoxes.filter(p=>rectsOverlap(p,box)).length;
-      if(overlapCount===0){ chosen={x:box.x,y:box.y}; placedBoxes.push(box); bestOverlapCount=0; break; }
-      if(overlapCount<bestOverlapCount){ chosen={x:box.x,y:box.y}; bestOverlapCount=overlapCount; }
-      if(i===15){ placedBoxes.push({x:chosen.x,y:chosen.y,w:labelW,h:labelH}); }
+    const ux=dx/len, uy=dy/len;   // 線方向の単位ベクトル
+    const nx=-uy,   ny=ux;        // 直交方向
+
+    const lw = Math.max(24, r.label.length * 11);
+    const lh = 18;
+
+    // 候補：線上3点 × 直交±7段階
+    const tPoints = [0.5, 0.35, 0.65, 0.2, 0.8];
+    const offsets = [0, 16, -16, 32, -32, 48, -48, 64, -64];
+    let best = null, bestScore = -Infinity;
+
+    for(const t of tPoints){
+      const mx = x1 + dx*t;
+      const my = y1 + dy*t;
+      for(const off of offsets){
+        const lx = mx + nx*off;
+        const ly = my + ny*off;
+        const box = {x:lx-lw/2, y:ly-lh/2, w:lw, h:lh};
+        if(!overlaps(box)){
+          const score = 1000 - Math.abs(off) - Math.abs(t-0.5)*50;
+          if(score > bestScore){ bestScore=score; best=box; }
+        } else {
+          const score = minDist(box) - 1000 - Math.abs(off);
+          if(score > bestScore){ bestScore=score; best=box; }
+        }
+      }
     }
-    return { ...r, show:true, x1,y1,x2,y2, hasLabel:true, labelCx:chosen.x+labelW/2, labelCy:chosen.y+labelH/2, labelW, labelH };
+    if(!best){ best={x:x1+(dx*0.5)-lw/2, y:y1+(dy*0.5)-lh/2, w:lw, h:lh}; }
+    obstacles.push(best);
+    return { ...r, show:true, x1,y1,x2,y2, hasLabel:true,
+      labelCx:best.x+lw/2, labelCy:best.y+lh/2, labelW:lw, labelH:lh };
   });
 
   return { nodeRender, edgeRender };
