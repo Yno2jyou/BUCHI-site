@@ -191,7 +191,7 @@ async function compressImage(dataUri, maxPx=800, quality=0.72) {
   });
 }
 
-async function uploadMurmurFiles(murmurId, files) {
+async function uploadMurmurFiles(files) {
   return await Promise.all((files||[]).map(async (f) => {
     if (f.type==="image" && isDataUri(f.data)) {
       const compressed = await compressImage(f.data);
@@ -338,7 +338,7 @@ function useStore() {
     const mid = uid();
     const now = new Date();
     let uploadedFiles = [];
-    try { uploadedFiles = await uploadMurmurFiles(mid, files||[]); }
+    try { uploadedFiles = await uploadMurmurFiles(files||[]); }
     catch(e) { console.error(e); uploadedFiles = files||[]; }
     const m = { id: mid, text, files: uploadedFiles, date: now.toLocaleString("ja-JP"), isoDate: now.toISOString() };
     const nextMurmurs = [m, ...(author.murmurs||[])];
@@ -857,7 +857,6 @@ function Styles({site, lightMode}){
     .color-row{display:flex;align-items:center;gap:12px}.color-swatch{width:36px;height:36px;border-radius:3px;border:1px solid rgba(255,255,255,.2);cursor:pointer;flex-shrink:0;transition:transform .15s}.color-swatch:hover{transform:scale(1.08)}.color-input-hidden{width:0;height:0;opacity:0;position:absolute}
     .gradient-preview{height:140px;border-radius:6px;border:1px solid rgba(255,255,255,.12);margin-bottom:20px;position:relative;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.4)}
     .gp-dot{position:absolute;top:14px;right:14px;width:10px;height:10px;border-radius:50%;box-shadow:0 0 10px currentColor}
-    .gp-title{position:absolute;bottom:16px;left:20px;font-family:var(--serif);font-size:20px;font-weight:300;color:#e8e4de;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.7);line-height:1.2}
     .alist{display:flex;flex-direction:column;gap:1px;background:var(--border);margin-bottom:24px}
     .arow{background:var(--bg);display:flex;flex-direction:column;gap:10px;padding:14px 18px;transition:background .2s}.arow:hover{background:var(--deep)}
     .arow-top{display:flex;align-items:center;gap:10px;width:100%}
@@ -881,8 +880,6 @@ function Styles({site, lightMode}){
     .msg-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
     .msg-name{font-size:13px;color:var(--txt);font-weight:500}.msg-target{font-size:10px;letter-spacing:.18em;color:var(--accent);text-transform:uppercase;border:1px solid var(--accent-glow);padding:2px 8px;border-radius:1px}.msg-date{font-size:10px;color:var(--txt3);margin-left:auto}.msg-body{font-size:13px;line-height:1.9;color:var(--txt2);white-space:pre-wrap}.msg-acts{display:flex;gap:6px;margin-top:10px}
     .badge{background:var(--accent);color:var(--bg);font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px}
-    .novel-badge-pin{font-size:10px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);padding:1px 7px;border-radius:2px;letter-spacing:.08em;flex-shrink:0}
-    .novel-badge-lock{font-size:10px;background:rgba(239,68,68,.12);border:1px solid #ef4444;color:#ef4444;padding:1px 7px;border-radius:2px;letter-spacing:.08em;flex-shrink:0}
     .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
     .toggle-label{font-size:13px;color:var(--txt);letter-spacing:.04em}
     .toggle-desc{font-size:11px;color:var(--txt2);margin-top:2px}
@@ -892,8 +889,6 @@ function Styles({site, lightMode}){
     .toggle-slider::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:var(--txt3);border-radius:50%;transition:transform .2s,background .2s}
     .toggle-switch input:checked+.toggle-slider{background:var(--accent-dim);border-color:var(--accent)}
     .toggle-switch input:checked+.toggle-slider::before{transform:translateX(18px);background:var(--accent)}
-    .wc-stat{font-family:var(--serif);font-size:11px;color:var(--txt3);letter-spacing:.1em;margin-left:4px}
-    .wc-stat b{color:var(--accent);font-weight:400}
     .mobile-back-btn{display:none}
     /* IMAGE CROP MODAL */
     .crop-modal{width:100%;max-width:420px}
@@ -915,29 +910,8 @@ function Styles({site, lightMode}){
     .auth-tab.active{border-bottom-color:var(--accent);color:var(--accent)}
     @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
     @keyframes driftDown{0%{transform:translateY(-120px)}100%{transform:translateY(100vh)}}
-    .pt-overlay{position:fixed;inset:0;z-index:8000;pointer-events:none;display:flex;align-items:center;justify-content:center;background:transparent}
-    .pt-ink-bg{position:absolute;inset:0;background:var(--bg);opacity:0}
-    .pt-kanji-svg{position:relative;z-index:1}
-    @keyframes ptBgIn{0%{opacity:0}100%{opacity:1}}
-    @keyframes ptBgOut{0%{opacity:1}100%{opacity:0}}
-    @keyframes ptKanjiOut{0%{opacity:1}50%{opacity:.6}100%{opacity:0}}
-    @keyframes ptColAppear{0%{transform:scaleY(0);transform-origin:top}100%{transform:scaleY(1);transform-origin:top}}
-    @keyframes ptColFade{0%{opacity:1}100%{opacity:0}}
-    @keyframes ptGridFadeOut{0%{opacity:1}60%{opacity:.7}100%{opacity:0}}
-    .pt-grid-overlay{position:fixed;inset:0;z-index:8000;pointer-events:none;display:flex;flex-direction:row-reverse;align-items:stretch}
-    .pt-grid-col{height:100%;display:flex;flex-direction:column;opacity:0}
-    .pt-grid-cell{border:1px solid;flex-shrink:0}
-    .pt-overlay{position:fixed;inset:0;z-index:8000;pointer-events:none;overflow:hidden}
-    .pt-ink{position:absolute;inset:0;background:var(--bg);transform-origin:center;opacity:0}
-    .pt-slide{position:absolute;inset:0;background:var(--bg);transform:translateX(-100%)}
-    .pt-char{position:fixed;font-family:var(--serif);color:var(--txt2);pointer-events:none;z-index:8001;opacity:0;font-size:18px;transition:none}
-    @keyframes ptCharScatter{0%{opacity:.7;transform:translate(0,0) rotate(0deg) scale(1)}100%{opacity:0;transform:var(--tx) rotate(var(--rot)) scale(.4)}}
-    @keyframes ptInkIn{0%{opacity:0}60%{opacity:1}100%{opacity:1}}
-    @keyframes ptInkOut{0%{opacity:1}100%{opacity:0}}
-    @keyframes ptSlideIn{0%{transform:translateX(-6%)}100%{transform:translateX(0)}}
     @keyframes driftUp{0%{transform:translateY(110vh)}100%{transform:translateY(-120px)}}
     .bg-text-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
-    .bg-text-col{position:absolute;top:0;display:flex;flex-direction:column;gap:2.2em;writing-mode:vertical-rl;text-orientation:mixed;font-family:var(--serif);white-space:nowrap;will-change:transform}
     .rise{animation:rise .6s ease forwards;opacity:0}.d1{animation-delay:.04s}.d2{animation-delay:.14s}.d3{animation-delay:.26s}.d4{animation-delay:.38s}
     @keyframes fadein{from{opacity:0}to{opacity:1}}.fadein{animation:fadein .3s ease forwards}
     ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border-hi)}
@@ -1595,11 +1569,10 @@ function HitorigotoPage({author}){
   const [lightbox,setLightbox]=useState(null);
   const [byDate,setByDate]=useState(false);
   const murmurs=useMemo(()=>author.murmurs||[],[author.murmurs]);
-  const filtered=murmurs;
-  const sortedAsc=useMemo(()=>[...filtered].sort((a,b)=>{
+  const sortedAsc=useMemo(()=>[...murmurs].sort((a,b)=>{
     const da=new Date(a.isoDate||a.date), db2=new Date(b.isoDate||b.date);
     return da-db2;
-  }),[filtered]);
+  }),[murmurs]);
   const grouped=useMemo(()=>groupByYM(sortedAsc,m=>m.isoDate||m.date),[sortedAsc]);
 
   const renderList=list=>(
@@ -1632,12 +1605,12 @@ function HitorigotoPage({author}){
         </div>
         <div className="htg-toolbar rise d2">
           <button className={`tag-chip ${byDate?"active":""}`} onClick={()=>setByDate(b=>!b)}>📅 年月別</button>
-          <span className="htg-count">{filtered.length}件</span>
+          <span className="htg-count">{murmurs.length}件</span>
         </div>
         <div className="rise d3">
           {byDate
             ?grouped.map(([ym,list])=><div key={ym} className="date-group"><div className="date-label">{ym}</div>{renderList(list)}</div>)
-            :renderList(filtered)
+            :renderList(murmurs)
           }
         </div>
       </div>
@@ -2686,12 +2659,12 @@ function AdminPanel({store,onClose}){
 
 // ═══════════════ BG TEXT LAYER ═══════════════
 function BgTextLayer({novels}){
-  const [cols, setCols] = React.useState([]);
-  const poolRef = React.useRef([]);
-  const usedRef = React.useRef([]);
-  const colTimersRef = React.useRef({});
+  const [cols, setCols] = useState([]);
+  const poolRef = useRef([]);
+  const usedRef = useRef([]);
+  const colTimersRef = useRef({});
 
-  const buildPool = React.useCallback((nvls)=>{
+  const buildPool = useCallback((nvls)=>{
     const sentences = [];
     nvls.forEach(n=>{
       (n.chapters||[]).forEach(ch=>{
@@ -2714,7 +2687,7 @@ function BgTextLayer({novels}){
     usedRef.current=[];
   },[]);
 
-  const nextPhrase = React.useCallback(()=>{
+  const nextPhrase = useCallback(()=>{
     if(poolRef.current.length===0){
       if(usedRef.current.length===0) return null;
       poolRef.current=[...usedRef.current].sort(()=>Math.random()-.5);
@@ -2726,7 +2699,7 @@ function BgTextLayer({novels}){
     return toV(phrase);
   },[]);
 
-  React.useEffect(()=>{
+  useEffect(()=>{
     if(!novels||novels.length===0) return;
     buildPool(novels);
 
