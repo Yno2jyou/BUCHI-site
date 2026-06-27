@@ -540,11 +540,11 @@ function fmtDate(iso){
 const MIN_LINE_LEN = 8;   // あまりに短い断片（記号だけの行など）は候補から除く
 const MAX_LINE_LEN = 140; // 長すぎる段落は10選としては読みにくいので除く
 
-// 「〜と〇〇は言った」のように、台詞のすぐ後ろに付く話者表示だけの短い一文は、
-// 単体で読んでも面白みのない断片になりがちなので、地の文10選の候補からは除外する。
-const SPEECH_TAG_RE = /^と[、,]?[^「」、,]{0,6}(は|が|も)?[、,]?(言|答え|呟|囁|叫|笑|頷|聞|尋|告げ|呼びかけ|怒鳴|漏ら|零し|返し|問|思|考え|感じ)[^「」]{0,6}[。.]?$/;
+// 「〜と〇〇は言った」「と訊いた。」のように台詞直後に付く話者表示だけの断片は
+// 単体で読んでも意味をなさないため地の文10選の候補から除外する。
+// 「と」で始まり30文字以下の場合を話者表示断片とみなす（30文字超は情景描写を含む可能性があるため通過）。
+const SPEECH_TAG_RE = /^と[^「」]{1,29}[。.!！?？]?$/;
 function isSpeechTagOnly(text){
-  if(text.length > 20) return false; // 長い場合は話者表示だけでなく実質的な内容を含むとみなす
   return SPEECH_TAG_RE.test(text);
 }
 
@@ -2035,7 +2035,7 @@ function CharacterGraph({characters,relations,groups}){
   const ys=characters.map(c=>c.y??100);
   const minX=Math.min(...xs), maxX=Math.max(...xs);
   const minY=Math.min(...ys), maxY=Math.max(...ys);
-  const pad=70;
+  const pad=90;
   const spanX=Math.max(maxX-minX,1), spanY=Math.max(maxY-minY,1);
   const scaleX=(W-pad*2)/spanX, scaleY=(H-pad*2)/spanY;
   const scale=Math.min(scaleX,scaleY,2.2);
@@ -2866,6 +2866,12 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     return { ...g, x, y, width, height };
   }).filter(Boolean), [groups, byId]);
 
+  // 管理エディタの関係線ラベルを layoutGraphLabels で衝突回避して配置する。
+  // ノード座標はピクセル直値なので px/py は恒等関数。
+  const { edgeRender: editorEdgeRender } = useMemo(()=>
+    layoutGraphLabels({ characters, relations, px: x=>x??100, py: y=>y??100, nodeRadius: NODE_R }),
+  [characters, relations]);
+
   if(characters.length<2){
     return(
       <div>
@@ -2890,19 +2896,18 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
                 {g.name&&<text x={g.x+14} y={g.y+20} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)">{g.name}</text>}
               </g>
             ))}
-            {relations.map(r=>{
-              const a=byId[r.fromId], b=byId[r.toId];
-              if(!a||!b) return null;
-              const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
-              const mx=(x1+x2)/2, my=(y1+y2)/2;
-              const geo=arrowGeometry(x1,y1,x2,y2,r.arrowType||"none",NODE_R,8);
+            {editorEdgeRender.filter(r=>r.show).map(r=>{
+              const geo=arrowGeometry(r.x1,r.y1,r.x2,r.y2,r.arrowType||"none",NODE_R,8);
               return(
                 <g key={r.id}>
                   <line x1={geo.lx1} y1={geo.ly1} x2={geo.lx2} y2={geo.ly2} stroke={r.color||"#c8a86a"} strokeWidth="1.5" opacity="0.6"/>
                   {geo.endArrowPoints&&<polygon points={geo.endArrowPoints} fill={r.color||"#c8a86a"} opacity="0.85"/>}
                   {geo.startArrowPoints&&<polygon points={geo.startArrowPoints} fill={r.color||"#c8a86a"} opacity="0.85"/>}
-                  {r.label&&(
-                    <text x={mx} y={my-6} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{r.label}</text>
+                  {r.hasLabel&&(
+                    <>
+                      <rect x={r.labelCx-r.labelW/2} y={r.labelCy-r.labelH/2} width={r.labelW} height={r.labelH} fill="var(--bg)" opacity="0.88"/>
+                      <text x={r.labelCx} y={r.labelCy+4} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{r.label}</text>
+                    </>
                   )}
                 </g>
               );
