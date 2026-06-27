@@ -379,7 +379,7 @@ function useStore() {
     const chars = novel?.characters||[];
     if(chars.length < 2) return null;
     const rid = uid();
-    const rel = { id: rid, fromId: chars[0].id, toId: chars[1].id, label:"", color:"#c8a86a" };
+    const rel = { id: rid, fromId: chars[0].id, toId: chars[1].id, label:"", color:"#c8a86a", arrowType:"none" };
     const updated = [...(novel?.charRelations||[]), rel];
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
     try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
@@ -596,6 +596,111 @@ function sampleN(arr, n){
     pool.splice(idx,1);
   }
   return result;
+}
+
+// ═══════════════ 相関図：ラベル衝突回避・矢印描画ヘルパー ═══════════════
+// 矩形どうしが重なっているかを判定する単純なAABB（軸並行境界矩形）判定
+function rectsOverlap(a, b){
+  return !(a.x+a.w < b.x || b.x+b.w < a.x || a.y+a.h < b.y || b.y+b.h < a.y);
+}
+
+// 登場人物アイコン・名前ラベル・関係線ラベルが互いに重ならないよう、
+// 各ラベルの表示位置を簡易的な衝突回避アルゴリズムで調整する。
+// ノードの位置（円アイコン自体）は著者が配置した意味のある情報なので動かさず、
+// 「ラベルをどちら向きにずらすか」だけを調整することで重なりを避ける。
+function layoutGraphLabels({characters, relations, px, py, nodeRadius=24}){
+  const placedBoxes = []; // これまでに確定した「これ以上重ねてはいけない」矩形の一覧
+  const nodePos = {};
+
+  // ① まずすべてのノード（アイコン）自体を、動かせない障害物として確保する
+  characters.forEach(c=>{
+    const cx=px(c.x), cy=py(c.y);
+    nodePos[c.id] = {cx, cy};
+    placedBoxes.push({x:cx-nodeRadius, y:cy-nodeRadius, w:nodeRadius*2, h:nodeRadius*2});
+  });
+
+  // ② 各ノードの名前ラベルを、重ならない位置に配置する（下→上→右→左→斜めの順に候補を試す）
+  const nodeRender = characters.map(c=>{
+    const {cx,cy} = nodePos[c.id];
+    const labelW = Math.max(26, (c.name||"").length * 13);
+    const labelH = 16;
+    const candidates = [
+      {x:cx-labelW/2, y:cy+nodeRadius+8},                          // 下（デフォルト）
+      {x:cx-labelW/2, y:cy-nodeRadius-8-labelH},                    // 上
+      {x:cx+nodeRadius+10, y:cy-labelH/2},                          // 右
+      {x:cx-nodeRadius-10-labelW, y:cy-labelH/2},                   // 左
+      {x:cx-labelW/2, y:cy+nodeRadius+8+labelH+6},                  // さらに下
+      {x:cx+nodeRadius+10, y:cy+nodeRadius+8},                      // 右下
+      {x:cx-nodeRadius-10-labelW, y:cy+nodeRadius+8},               // 左下
+      {x:cx+nodeRadius+10, y:cy-nodeRadius-8-labelH},               // 右上
+      {x:cx-nodeRadius-10-labelW, y:cy-nodeRadius-8-labelH},        // 左上
+      {x:cx-labelW/2, y:cy+nodeRadius+8+(labelH+6)*2},              // さらにさらに下
+    ];
+    // 候補の中から「重なりが発生しないもの」を優先して選び、すべて重なる場合は
+    // 重なりの個数が最も少ない候補（＝もっとも見え方が崩れにくい候補）にフォールバックする
+    let chosen = candidates[0], bestOverlapCount = Infinity;
+    for(const cand of candidates){
+      const box={x:cand.x,y:cand.y,w:labelW,h:labelH};
+      const overlapCount = placedBoxes.filter(p=>rectsOverlap(p,box)).length;
+      if(overlapCount===0){ chosen=cand; bestOverlapCount=0; break; }
+      if(overlapCount<bestOverlapCount){ chosen=cand; bestOverlapCount=overlapCount; }
+    }
+    placedBoxes.push({x:chosen.x,y:chosen.y,w:labelW,h:labelH});
+    return { id:c.id, cx, cy, labelCx: chosen.x+labelW/2, labelCy: chosen.y+labelH/2+4 };
+  });
+
+  // ③ 関係線のラベルを、重ならない位置に配置する（線の中点から垂直方向に少しずつずらして候補を試す）
+  const edgeRender = relations.map(r=>{
+    const a=nodePos[r.fromId], b=nodePos[r.toId];
+    if(!a||!b) return { ...r, show:false };
+    const x1=a.cx, y1=a.cy, x2=b.cx, y2=b.cy;
+    if(!r.label){
+      return { ...r, show:true, x1,y1,x2,y2, hasLabel:false };
+    }
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    const dx=x2-x1, dy=y2-y1;
+    const len=Math.max(1, Math.hypot(dx,dy));
+    const nx=-dy/len, ny=dx/len; // 線に直交する単位ベクトル
+    const labelW = Math.max(22, r.label.length * 10);
+    const labelH = 16;
+    let chosen = {x:mx-labelW/2, y:my-labelH/2}, bestOverlapCount=Infinity;
+    for(let i=0;i<9;i++){
+      const offset = i===0 ? 0 : Math.ceil(i/2)*15*(i%2===0?1:-1);
+      const lx=mx+nx*offset, ly=my+ny*offset;
+      const box={x:lx-labelW/2, y:ly-labelH/2, w:labelW, h:labelH};
+      const overlapCount = placedBoxes.filter(p=>rectsOverlap(p,box)).length;
+      if(overlapCount===0){ chosen={x:box.x,y:box.y}; placedBoxes.push(box); bestOverlapCount=0; break; }
+      if(overlapCount<bestOverlapCount){ chosen={x:box.x,y:box.y}; bestOverlapCount=overlapCount; }
+      if(i===8){ placedBoxes.push({x:chosen.x,y:chosen.y,w:labelW,h:labelH}); }
+    }
+    return { ...r, show:true, x1,y1,x2,y2, hasLabel:true, labelCx:chosen.x+labelW/2, labelCy:chosen.y+labelH/2, labelW, labelH };
+  });
+
+  return { nodeRender, edgeRender };
+}
+
+// 線を円アイコンの「縁」で止め、必要に応じて矢印（三角形）の頂点座標も計算する。
+// arrowType: "none"（線のみ） | "end"（fromId→toIdの一方向矢印） | "both"（双方向矢印）
+function arrowGeometry(x1,y1,x2,y2,arrowType,nodeRadius=24,arrowSize=9){
+  const dx=x2-x1, dy=y2-y1;
+  const len=Math.max(1, Math.hypot(dx,dy));
+  const ux=dx/len, uy=dy/len;
+  const hasEndArrow = arrowType==="end" || arrowType==="both";
+  const hasStartArrow = arrowType==="both";
+  const startTrim = nodeRadius + (hasStartArrow?arrowSize:0);
+  const endTrim = nodeRadius + (hasEndArrow?arrowSize:0);
+  const lx1=x1+ux*startTrim, ly1=y1+uy*startTrim;
+  const lx2=x2-ux*endTrim, ly2=y2-uy*endTrim;
+  const makeTriangle=(tipX,tipY,dirX,dirY)=>{
+    const angle=Math.atan2(dirY,dirX);
+    const a1=angle+Math.PI-Math.PI/7, a2=angle+Math.PI+Math.PI/7;
+    return `${tipX},${tipY} ${tipX+arrowSize*Math.cos(a1)},${tipY+arrowSize*Math.sin(a1)} ${tipX+arrowSize*Math.cos(a2)},${tipY+arrowSize*Math.sin(a2)}`;
+  };
+  return {
+    lx1, ly1, lx2, ly2,
+    endArrowPoints: hasEndArrow ? makeTriangle(x2-ux*nodeRadius, y2-uy*nodeRadius, ux, uy) : null,
+    startArrowPoints: hasStartArrow ? makeTriangle(x1+ux*nodeRadius, y1+uy*nodeRadius, -ux, -uy) : null,
+  };
 }
 
 // ═══════════════ STYLES ═══════════════
@@ -1137,16 +1242,18 @@ function Styles({site, lightMode}){
 
     /* ═══ キャラクター相関図エディタ（管理画面） ═══ */
     .char-editor-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
-    .char-editor-stage{position:relative;width:100%;height:480px;border:1px solid var(--border-hi);border-radius:2px;background:
+    /* 外側：見える範囲は固定サイズで、内側キャンバスが大きい場合はスクロールして辿れる */
+    .char-editor-viewport{position:relative;width:100%;height:480px;border:1px solid var(--border-hi);border-radius:2px;overflow:auto;background:color-mix(in srgb,var(--bg) 96%,#fff 1%)}
+    /* 内側：実際にキャラクターを配置するキャンバス。登場人物の座標に応じて動的に拡大する */
+    .char-editor-stage{position:relative;min-width:100%;min-height:100%;background:
       linear-gradient(var(--border) 1px,transparent 1px) 0 0/24px 24px,
-      linear-gradient(90deg,var(--border) 1px,transparent 1px) 0 0/24px 24px,
-      color-mix(in srgb,var(--bg) 96%,#fff 1%);
-      overflow:hidden;touch-action:none}
+      linear-gradient(90deg,var(--border) 1px,transparent 1px) 0 0/24px 24px;
+      }
     .char-editor-svg{position:absolute;inset:0;pointer-events:none}
-    .char-editor-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:grab;user-select:none;touch-action:none;transform:translate(-50%,-50%)}
+    .char-editor-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:grab;user-select:none;transform:translate(-50%,-50%)}
     .char-editor-node.dragging{cursor:grabbing;z-index:5}
     .char-editor-node.selected .char-editor-node-circle{box-shadow:0 0 0 3px var(--accent)}
-    .char-editor-node-circle{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;color:var(--bg);border:2px solid var(--bg);box-shadow:0 2px 10px rgba(0,0,0,.4)}
+    .char-editor-node-circle{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;color:var(--bg);border:2px solid var(--bg);box-shadow:0 2px 10px rgba(0,0,0,.4);touch-action:none}
     .char-editor-node-name{font-size:10px;color:var(--txt2);letter-spacing:.04em;white-space:nowrap;background:var(--bg);padding:1px 6px;border-radius:8px}
     .char-editor-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--txt3);font-size:13px;text-align:center;padding:0 30px;line-height:1.9}
     .char-editor-hint{font-size:11px;color:var(--txt3);margin-bottom:14px;line-height:1.8}
@@ -1218,7 +1325,7 @@ function Styles({site, lightMode}){
       .reading-foot-btn{padding:8px 14px;font-size:10px}
       .char-modal{padding:28px 22px 36px}
       .char-modal-bg{padding:20px 14px}
-      .char-editor-stage{height:380px}
+      .char-editor-viewport{height:380px}
       .tensen-wrap{padding:calc(var(--nav-h) + 30px) 20px 72px}
       .tensen-title{font-size:24px}
       .tensen-tab{margin-right:20px;font-size:11px}
@@ -1911,9 +2018,14 @@ function CharacterModal({novel,onClose}){
 // 表示エリアの中央に大きく収まるように再計算して描画する読み取り専用の相関図。
 // 編集時にどれだけ大きい/偏ったキャンバスで配置しても、ここで毎回
 // 「実際のキャラクター座標の範囲」だけを基準に正規化するため、必ず中央に表示される。
+// 名前ラベル・関係線ラベルは layoutGraphLabels による衝突回避を経て配置されるため、
+// 文字どうし・文字とアイコンが重ならないようになっている。
 function CharacterGraph({characters,relations,groups}){
-  const W=680,H=440;
   if(characters.length===0) return null;
+  // 登場人物が多いほどキャンバスを広げ、ラベルが重なりにくいよう余裕を持たせる
+  const extra = Math.max(0, characters.length-6);
+  const W = Math.min(680 + extra*70, 1300);
+  const H = Math.min(440 + extra*46, 860);
   const byId=Object.fromEntries(characters.map(c=>[c.id,c]));
   const xs=characters.map(c=>c.x??100);
   const ys=characters.map(c=>c.y??100);
@@ -1941,6 +2053,9 @@ function CharacterGraph({characters,relations,groups}){
     return { ...g, x, y, width, height };
   }).filter(Boolean);
 
+  const { nodeRender, edgeRender } = layoutGraphLabels({characters, relations, px, py, nodeRadius:24});
+  const nodeById = Object.fromEntries(nodeRender.map(n=>[n.id,n]));
+
   return(
     <div className="char-graph-wrap">
       <svg className="char-graph-svg" viewBox={`0 0 ${W} ${H}`} width="100%" style={{minHeight:300}}>
@@ -1951,29 +2066,32 @@ function CharacterGraph({characters,relations,groups}){
             {g.name&&<text x={g.x+14} y={g.y+20} className="char-group-label" fill={g.color||"#c8a86a"}>{g.name}</text>}
           </g>
         ))}
-        {relations.map(r=>{
-          const a=byId[r.fromId], b=byId[r.toId];
-          if(!a||!b) return null;
-          const x1=px(a.x),y1=py(a.y),x2=px(b.x),y2=py(b.y);
-          const mx=(x1+x2)/2, my=(y1+y2)/2;
+        {edgeRender.map(r=>{
+          if(!r.show) return null;
+          const geo=arrowGeometry(r.x1,r.y1,r.x2,r.y2,r.arrowType||"none",24,9);
           return(
             <g key={r.id}>
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={r.color||"var(--accent)"} strokeWidth="1.3" opacity="0.55"/>
-              {r.label&&(
+              <line x1={geo.lx1} y1={geo.ly1} x2={geo.lx2} y2={geo.ly2} stroke={r.color||"var(--accent)"} strokeWidth="1.3" opacity="0.55"/>
+              {geo.endArrowPoints&&<polygon points={geo.endArrowPoints} fill={r.color||"var(--accent)"} opacity="0.8"/>}
+              {geo.startArrowPoints&&<polygon points={geo.startArrowPoints} fill={r.color||"var(--accent)"} opacity="0.8"/>}
+              {r.hasLabel&&(
                 <>
-                  <rect x={mx-r.label.length*4.6} y={my-9} width={r.label.length*9.2} height={16} className="char-edge-label-bg"/>
-                  <text x={mx} y={my+3} className="char-edge-label">{r.label}</text>
+                  <rect x={r.labelCx-r.labelW/2} y={r.labelCy-r.labelH/2} width={r.labelW} height={r.labelH} className="char-edge-label-bg"/>
+                  <text x={r.labelCx} y={r.labelCy+3} className="char-edge-label">{r.label}</text>
                 </>
               )}
             </g>
           );
         })}
-        {characters.map(c=>(
-          <g key={c.id}>
-            <circle cx={px(c.x)} cy={py(c.y)} r="24" className="char-node-circle" stroke={c.color||"var(--accent)"} fill={c.color||"var(--accent)"}/>
-            <text x={px(c.x)} y={py(c.y)+42} className="char-node-label">{c.name}</text>
-          </g>
-        ))}
+        {nodeRender.map(n=>{
+          const c=byId[n.id];
+          return(
+            <g key={n.id}>
+              <circle cx={n.cx} cy={n.cy} r="24" className="char-node-circle" stroke={c.color||"var(--accent)"} fill={c.color||"var(--accent)"}/>
+              <text x={n.labelCx} y={n.labelCy} className="char-node-label">{c.name}</text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -2680,11 +2798,17 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
   const characters = novel.characters||[];
   const relations = novel.charRelations||[];
   const groups = novel.charGroups||[];
-  const stageRef = useRef(null);
+  const stageRef = useRef(null); // 実際の配置キャンバス（スクロール内側の大きな領域）への参照
   const dragRef = useRef(null); // {charId, offsetX, offsetY}
   const [dragging, setDragging] = useState(null);
   const byId = useMemo(()=>Object.fromEntries(characters.map(c=>[c.id,c])), [characters]);
   const GROUP_COLORS = ["#c8a86a","#8b5cf6","#f59e0b","#38bdf8","#f87171","#4ade80"];
+  const NODE_R = 23; // .char-editor-node-circle の半径（46px円の半分）
+
+  // 登場人物が画面外にこぼれず、かつ多い場合はスクロールで辿れるよう、
+  // 実際の配置座標に応じてキャンバス自体のサイズを動的に広げる
+  const canvasW = Math.max(900, ...characters.map(c=>(c.x??100)+170), 900);
+  const canvasH = Math.max(560, ...characters.map(c=>(c.y??100)+170), 560);
 
   const getStageRect = () => stageRef.current?.getBoundingClientRect();
 
@@ -2705,6 +2829,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     const move = (e) => {
       const d = dragRef.current;
       if(!d) return;
+      e.preventDefault();
       const clientX = e.touches?e.touches[0].clientX:e.clientX;
       const clientY = e.touches?e.touches[0].clientY:e.clientY;
       const dx = clientX - d.startX, dy = clientY - d.startY;
@@ -2741,7 +2866,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     return(
       <div>
         <div className="char-editor-hint">相関図を作るには、まず「登場人物」タブで2人以上のキャラクターを登録してください。</div>
-        <div className="char-editor-stage">
+        <div className="char-editor-viewport">
           <div className="char-editor-empty">登場人物を2人以上登録すると、ここでドラッグして相関図を配置できるようになります。</div>
         </div>
       </div>
@@ -2750,42 +2875,47 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
 
   return(
     <div>
-      <div className="char-editor-hint">人物アイコンをドラッグして自由に配置できます。並べた位置関係はそのまま保たれた状態で、読者側では常に画面中央に大きく表示されます。下の「関係を追加」で人物同士を線で結び、「グループを追加」で所属先（クラス・家族など）の括りを作れます。</div>
-      <div className="char-editor-stage" ref={stageRef}>
-        <svg className="char-editor-svg" width="100%" height="100%">
-          {groupBoxes.map(g=>(
-            <g key={g.id}>
-              <rect x={g.x} y={g.y} width={g.width} height={g.height} rx="16"
-                fill={g.color||"#c8a86a"} fillOpacity="0.08" stroke={g.color||"#c8a86a"} strokeOpacity="0.5" strokeDasharray="3 4"/>
-              {g.name&&<text x={g.x+14} y={g.y+20} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)">{g.name}</text>}
-            </g>
-          ))}
-          {relations.map(r=>{
-            const a=byId[r.fromId], b=byId[r.toId];
-            if(!a||!b) return null;
-            const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
-            const mx=(x1+x2)/2, my=(y1+y2)/2;
-            return(
-              <g key={r.id}>
-                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={r.color||"#c8a86a"} strokeWidth="1.5" opacity="0.6"/>
-                {r.label&&(
-                  <text x={mx} y={my-6} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{r.label}</text>
-                )}
+      <div className="char-editor-hint">人物アイコンをドラッグして自由に配置できます。並べた位置関係はそのまま保たれた状態で、読者側では常に画面中央に大きく表示されます。登場人物が多い場合はキャンバスが自動的に広がるので、枠内をスクロールして配置してください。下の「関係を追加」で人物同士を線で結び（矢印にも変更できます）、「グループを追加」で所属先（クラス・家族など）の括りを作れます。</div>
+      <div className="char-editor-viewport">
+        <div className="char-editor-stage" ref={stageRef} style={{width:canvasW, height:canvasH}}>
+          <svg className="char-editor-svg" width={canvasW} height={canvasH}>
+            {groupBoxes.map(g=>(
+              <g key={g.id}>
+                <rect x={g.x} y={g.y} width={g.width} height={g.height} rx="16"
+                  fill={g.color||"#c8a86a"} fillOpacity="0.08" stroke={g.color||"#c8a86a"} strokeOpacity="0.5" strokeDasharray="3 4"/>
+                {g.name&&<text x={g.x+14} y={g.y+20} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)">{g.name}</text>}
               </g>
-            );
-          })}
-        </svg>
-        {characters.map(c=>(
-          <div key={c.id}
-            className={`char-editor-node ${dragging===c.id?"dragging":""} ${selectedCharId===c.id?"selected":""}`}
-            style={{left:c.x??100, top:c.y??100}}
-            onMouseDown={e=>startDrag(e,c.id)}
-            onTouchStart={e=>startDrag(e,c.id)}
-          >
-            <div className="char-editor-node-circle" style={{background:c.color||"#c8a86a"}}>{(c.name||"?").charAt(0)}</div>
-            <div className="char-editor-node-name">{c.name||"（無名）"}</div>
-          </div>
-        ))}
+            ))}
+            {relations.map(r=>{
+              const a=byId[r.fromId], b=byId[r.toId];
+              if(!a||!b) return null;
+              const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
+              const mx=(x1+x2)/2, my=(y1+y2)/2;
+              const geo=arrowGeometry(x1,y1,x2,y2,r.arrowType||"none",NODE_R,8);
+              return(
+                <g key={r.id}>
+                  <line x1={geo.lx1} y1={geo.ly1} x2={geo.lx2} y2={geo.ly2} stroke={r.color||"#c8a86a"} strokeWidth="1.5" opacity="0.6"/>
+                  {geo.endArrowPoints&&<polygon points={geo.endArrowPoints} fill={r.color||"#c8a86a"} opacity="0.85"/>}
+                  {geo.startArrowPoints&&<polygon points={geo.startArrowPoints} fill={r.color||"#c8a86a"} opacity="0.85"/>}
+                  {r.label&&(
+                    <text x={mx} y={my-6} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{r.label}</text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {characters.map(c=>(
+            <div key={c.id}
+              className={`char-editor-node ${dragging===c.id?"dragging":""} ${selectedCharId===c.id?"selected":""}`}
+              style={{left:c.x??100, top:c.y??100}}
+              onMouseDown={e=>startDrag(e,c.id)}
+              onTouchStart={e=>startDrag(e,c.id)}
+            >
+              <div className="char-editor-node-circle" style={{background:c.color||"#c8a86a"}}>{(c.name||"?").charAt(0)}</div>
+              <div className="char-editor-node-name">{c.name||"（無名）"}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div style={{marginTop:28}}>
@@ -2800,9 +2930,14 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
                 <select className="char-rel-select" value={r.fromId} onChange={e=>onUpdateRelation(r.id,{fromId:e.target.value})}>
                   {characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <span className="char-rel-arrow">→</span>
+                <span className="char-rel-arrow">{r.arrowType==="both"?"⇄":r.arrowType==="end"?"→":"─"}</span>
                 <select className="char-rel-select" value={r.toId} onChange={e=>onUpdateRelation(r.id,{toId:e.target.value})}>
                   {characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <select className="char-rel-select" value={r.arrowType||"none"} onChange={e=>onUpdateRelation(r.id,{arrowType:e.target.value})}>
+                  <option value="none">─ 線のみ</option>
+                  <option value="end">→ 矢印（一方向）</option>
+                  <option value="both">⇄ 矢印（双方向）</option>
                 </select>
                 <BufferedInput key={r.id+":label"} className="form-input" style={{flex:1,minWidth:120}} value={r.label||""} onCommit={v=>onUpdateRelation(r.id,{label:v})} placeholder="関係性（例：幼馴染、対立 など）"/>
                 <button className="icon-btn danger" onClick={()=>onDeleteRelation(r.id)}>🗑</button>
