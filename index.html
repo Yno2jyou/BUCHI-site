@@ -2228,6 +2228,37 @@ function useAnonAuthUid(){
   return uid;
 }
 
+// 端末（ブラウザ）に直接保存する進捗キー。
+// Firebase匿名認証のUIDはブラウザ／タブ／シークレットモードによって
+// 再発行されることがあり、その場合は「別人」としてFirestore上の進捗が
+// 引き継がれない（＝閲覧者には「リセットされた」ように見える）。
+// そのためUIDの永続性に依存せず、まずlocalStorageを正とし、
+// Firestoreは複数端末間の同期・バックアップとして併用する。
+const ENCOUNTER_LS_KEY = "encounterProgress_v1";
+
+function loadEncounterProgressLocal(){
+  try{
+    const raw = localStorage.getItem(ENCOUNTER_LS_KEY);
+    if(!raw) return { viewedNums: [], metEndingMan: false };
+    const data = JSON.parse(raw);
+    return {
+      viewedNums: Array.isArray(data.viewedNums) ? data.viewedNums : [],
+      metEndingMan: data.metEndingMan === true,
+    };
+  }catch(e){
+    console.error("encounter progress local load failed", e);
+    return { viewedNums: [], metEndingMan: false };
+  }
+}
+
+function saveEncounterProgressLocal(viewedNums, metEndingMan){
+  try{
+    localStorage.setItem(ENCOUNTER_LS_KEY, JSON.stringify({ viewedNums, metEndingMan }));
+  }catch(e){
+    console.error("encounter progress local save failed", e);
+  }
+}
+
 // 「不在の男」— 九十九人目を見届けたあと、闇の中に浮かび上がる幻の百人目の物語。
 // 句点や読点の連なりで自然な間（息継ぎ）の単位に分割し、一節ずつ浮かび上がらせる。
 const ABSENT_MAN_TITLE = "不在の男";
@@ -2246,13 +2277,16 @@ const ABSENT_MAN_PARAGRAPHS = [
 function EncounterPage({onExit, stories}){
   const uid = useAnonAuthUid();
   const motokoStories = stories && stories.length>0 ? stories : MOTOKO_STORIES;
-  const [viewedNums, setViewedNums] = useState([]); // すれ違った男のnum一覧（99は除く）
+  // 初期値はlocalStorageから即時読み込む（タブやブラウザを閉じても消えないようにするため）。
+  // Firestore側の進捗（uid取得後に読み込まれる）はこれより後に到着し、より新しい場合のみ反映する。
+  const initialLocalProgress = useMemo(()=>loadEncounterProgressLocal(),[]);
+  const [viewedNums, setViewedNums] = useState(initialLocalProgress.viewedNums); // すれ違った男のnum一覧（99は除く）
   const [current, setCurrent] = useState(null);
   const [showStory, setShowStory] = useState(false);
   const [cityShift, setCityShift] = useState(0);
   const [cityHidden, setCityHidden] = useState(false);
   const [blackout, setBlackout] = useState(false);
-  const [metEndingMan, setMetEndingMan] = useState(false); // 99人目「終わりの男」を読み終えたか（進捗表示用。viewedNums/pickNextのロジックには影響しない）
+  const [metEndingMan, setMetEndingMan] = useState(initialLocalProgress.metEndingMan); // 99人目「終わりの男」を読み終えたか（進捗表示用。viewedNums/pickNextのロジックには影響しない）
   // blackoutStage: "silence"（無音の暗闇）→ "absent"（不在の男、本文が浮かび上がる）→ "complete"（記録のコンプリートと敬意）
   const [blackoutStage, setBlackoutStage] = useState("silence");
   const [absentParaIdx, setAbsentParaIdx] = useState(-1); // 浮かび上がった段落数（-1=まだ何も）
@@ -2275,41 +2309,64 @@ function EncounterPage({onExit, stories}){
     return usable[Math.floor(Math.random()*usable.length)];
   },[motokoStories]);
 
-  // 認証や進捗の読み込みを待たず、画面が開いた瞬間に最初の男をすぐ表示する。
-  // 認証(uid取得)に時間がかかったり失敗したりしても、体験自体は止めない。
-  useEffect(()=>{
-    if(initializedRef.current) return;
-    initializedRef.current = true;
-    setCurrent(pickNext([]));
-    setCityShift(Math.floor(Math.random()*12)*25);
-  },[pickNext]);
-
-  // uidが取得できたら（多くは即時〜数百ms後）、Firestoreの進捗を読み込んで反映する。
-  // すでに画面には最初の男が表示済みなので、ここでは進捗(viewedNums/metEndingMan)だけを追いつかせる。
-  useEffect(()=>{
-    if(!uid) return;
-    let mounted = true;
-    db.collection("encounterProgress").doc(uid).get().then(snap=>{
-      if(!mounted) return;
-      if(snap.exists){
-        const data = snap.data();
-        if(Array.isArray(data.viewedNums)) setViewedNums(data.viewedNums);
-        if(data.metEndingMan === true) setMetEndingMan(true);
-      }
-    }).catch(e=>console.error(e));
-    return ()=>{ mounted=false; };
-  },[uid]);
-
+  // localStorageへの保存は常に行う（タブ・ブラウザを閉じても消えないようにする本体の保存先）。
+  // Firestoreへの保存はuidが取得できている場合のみ（複数端末間の同期・バックアップ用途）。
+  // endingMan が undefined の場合は現在のmetEndingManを引き継ぐ。
   const saveProgress = useCallback((nums, endingMan)=>{
-    if(!uid) return; // 認証が済んでいない/失敗していても、表示自体は継続できる。保存だけスキップされる。
-    // endingMan が undefined の場合は現在の metEndingMan を参照しない（staleになる恐れがある）ため、
-    // 呼び出し側から明示的に渡す設計にする。
+    const resolvedEnding = endingMan !== undefined ? endingMan : metEndingMan;
+    saveEncounterProgressLocal(nums, resolvedEnding);
+    if(!uid) return; // 認証が済んでいない/失敗していても、ローカル保存は済んでいるので進捗は失われない。
     const payload = {
       viewedNums: nums,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
     if(endingMan !== undefined) payload.metEndingMan = endingMan;
     db.collection("encounterProgress").doc(uid).set(payload, { merge: true }).catch(e=>console.error(e));
+  },[uid, metEndingMan]);
+
+  const saveProgressRef = useRef(saveProgress);
+  saveProgressRef.current = saveProgress;
+
+  // 認証や進捗の読み込みを待たず、画面が開いた瞬間に最初の男をすぐ表示する。
+  // 認証(uid取得)に時間がかかったり失敗したりしても、体験自体は止めない。
+  // localStorageに既読進捗があれば、それを踏まえて「まだ読んでいない男」から選ぶ。
+  useEffect(()=>{
+    if(initializedRef.current) return;
+    initializedRef.current = true;
+    setCurrent(pickNext(initialLocalProgress.viewedNums));
+    setCityShift(Math.floor(Math.random()*12)*25);
+  },[pickNext]);
+
+  // uidが取得できたら（多くは即時〜数百ms後）、Firestoreの進捗を読み込んで反映する。
+  // すでに画面には最初の男が表示済みなので、ここでは進捗(viewedNums/metEndingMan)だけを追いつかせる。
+  // 注意：Firestore側のUIDはブラウザ環境によって再発行されることがあるため、
+  // 「Firestoreの方がローカルより進捗が少ない（＝別人として扱われ空だった）」場合は
+  // ローカルの記録を消さない。常に「より読んでいる方」を採用する。
+  useEffect(()=>{
+    if(!uid) return;
+    let mounted = true;
+    db.collection("encounterProgress").doc(uid).get().then(snap=>{
+      if(!mounted) return;
+      const localNow = loadEncounterProgressLocal();
+      if(snap.exists){
+        const data = snap.data();
+        const remoteNums = Array.isArray(data.viewedNums) ? data.viewedNums : [];
+        const remoteEnding = data.metEndingMan === true;
+        if(remoteNums.length > localNow.viewedNums.length){
+          // Firestore側がローカルより進んでいる（別端末等で進めた場合）→ こちらを採用しローカルにも反映
+          setViewedNums(remoteNums);
+          if(remoteEnding) setMetEndingMan(true);
+          saveEncounterProgressLocal(remoteNums, remoteEnding || localNow.metEndingMan);
+        } else if(localNow.viewedNums.length > remoteNums.length){
+          // ローカルの方が進んでいる（このUIDが別人として再発行された等）→ Firestore側を追いつかせる
+          saveProgressRef.current && saveProgressRef.current(localNow.viewedNums, localNow.metEndingMan);
+        }
+      } else if(localNow.viewedNums.length > 0){
+        // Firestoreにまだ記録がない（このUIDは初回）が、ローカルには進捗がある → Firestoreへ書き込んで同期
+        saveProgressRef.current && saveProgressRef.current(localNow.viewedNums, localNow.metEndingMan);
+      }
+    }).catch(e=>console.error(e));
+    return ()=>{ mounted=false; };
   },[uid]);
 
   const handleShowStory = () => {
