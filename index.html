@@ -210,7 +210,16 @@ async function uploadAuthorIcon(dataUri) {
 function useStore() {
   const [site,    setSiteLocal]   = useState(DEFAULT_SITE);
   const [author,  setAuthorLocal] = useState(DEFAULT_AUTHOR);
-  const [novels,  setNovelsLocal] = useState([]);
+  const [novels,  _setNovelsLocal] = useState([]);
+  const novelsRef = useRef([]); // novels の最新値を常に参照できるRef（クロージャ問題対策）
+  // setNovelsLocalを呼ぶたびに必ずnovelsRef.currentも同期させるラッパー
+  const setNovelsLocal = (updater) => {
+    _setNovelsLocal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      novelsRef.current = next;
+      return next;
+    });
+  };
   const [messages,setMsgLocal]    = useState([]);
   const [motokoStories, setMotokoStoriesLocal] = useState(MOTOKO_STORIES);
   const [loading, setLoading]     = useState(true);
@@ -232,7 +241,9 @@ function useStore() {
     }, e => { setDbError(e.message); check(); }));
 
     unsubs.push(db.collection("novels").orderBy("createdAt","asc").onSnapshot(snap => {
-      setNovelsLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setNovelsLocal(data);
+      novelsRef.current = data;
       check();
     }, e => { setDbError(e.message); check(); }));
 
@@ -301,7 +312,7 @@ function useStore() {
   const addChapter = async nid => {
     const cid = uid();
     const ch = { id: cid, title:"新しい章", content:"" };
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = [...(novel?.chapters||[]), ch];
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
     try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
@@ -311,7 +322,7 @@ function useStore() {
   // ───────── 登場人物（キャラクター解説）のCRUD ─────────
   const addCharacter = async nid => {
     const chid = uid();
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const idx = (novel?.characters||[]).length;
     const ch = { id: chid, name:"新しい人物", role:"", description:"",
       // 相関図エディタ上の初期座標。重ならないよう少しずつズラして配置する
@@ -325,7 +336,7 @@ function useStore() {
   // ドラッグ終了時に updateCharacter（Firestore書き込み）を一度だけ呼ぶ。
   // これにより onSnapshot との競合を防ぎ、座標が保存されるようにする。
   const updateCharacter = async (nid, chid, patch) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated} : n));
     try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
@@ -338,7 +349,7 @@ function useStore() {
     }));
   };
   const deleteCharacter = async (nid, chid) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.characters||[]).filter(c => c.id!==chid);
     // この人物が絡む相関線も一緒に削除する
     const updatedRel = (novel?.charRelations||[]).filter(r => r.fromId!==chid && r.toId!==chid);
@@ -352,7 +363,7 @@ function useStore() {
   const addCharGroup = async nid => {
     const gid = uid();
     const COLORS=["#c8a86a","#8b5cf6","#f59e0b","#38bdf8","#f87171","#4ade80"];
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const idx = (novel?.charGroups||[]).length;
     const g = { id: gid, name:"新しいグループ", color:COLORS[idx%COLORS.length], memberIds:[] };
     const updated = [...(novel?.charGroups||[]), g];
@@ -361,13 +372,13 @@ function useStore() {
     return gid;
   };
   const updateCharGroup = async (nid, gid, patch) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.charGroups||[]).map(g => g.id===gid ? {...g,...patch} : g);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
     try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
   };
   const toggleCharGroupMember = async (nid, gid, chid) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.charGroups||[]).map(g => {
       if(g.id!==gid) return g;
       const has = (g.memberIds||[]).includes(chid);
@@ -377,7 +388,7 @@ function useStore() {
     try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
   };
   const deleteCharGroup = async (nid, gid) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.charGroups||[]).filter(g => g.id!==gid);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
     try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
@@ -385,7 +396,7 @@ function useStore() {
 
   // ───────── キャラクター相関図（関係線）のCRUD ─────────
   const addCharRelation = async nid => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const chars = novel?.characters||[];
     if(chars.length < 2) return null;
     const rid = uid();
@@ -396,25 +407,25 @@ function useStore() {
     return rid;
   };
   const updateCharRelation = async (nid, rid, patch) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.charRelations||[]).map(r => r.id===rid ? {...r,...patch} : r);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
     try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
   };
   const deleteCharRelation = async (nid, rid) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.charRelations||[]).filter(r => r.id!==rid);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
     try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
   };
   const updateChapter = async (nid, cid, patch) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.chapters||[]).map(c => c.id===cid ? {...c,...patch} : c);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
     try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
   };
   const deleteChapter = async (nid, cid) => {
-    const novel = novels.find(n => n.id===nid);
+    const novel = novelsRef.current.find(n => n.id===nid);
     const updated = (novel?.chapters||[]).filter(c => c.id!==cid);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
     try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
