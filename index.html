@@ -235,6 +235,17 @@ function useStore() {
   const [motokoStories, setMotokoStoriesLocal] = useState(MOTOKO_STORIES);
   const [loading, setLoading]     = useState(true);
   const [dbError, setDbError]     = useState(null);
+  // Firestoreへの保存（update/set/delete）が失敗した場合に、その内容を
+  // 画面に表示するためのstate。これまでは catch(e){console.error(e)} で
+  // 握りつぶしていたため、保存に失敗していてもユーザーには「保存できた」
+  // ように見えてしまっていた（権限エラー等で書き込みが拒否された場合に
+  // 特に問題になる）。
+  const [saveError, setSaveError] = useState(null);
+  const notifySaveError = (label, e) => {
+    console.error(label, e);
+    setSaveError(`${label}: ${e?.code||""} ${e?.message||e}`);
+  };
+  const clearSaveError = () => setSaveError(null);
 
   useEffect(() => {
     const unsubs = [];
@@ -302,7 +313,7 @@ function useStore() {
     });
     siteWriteQueueRef.current = siteWriteQueueRef.current.then(
       () => db.collection("settings").doc("site").set(next)
-    ).catch(e => console.error(e));
+    ).catch(e => notifySaveError("サイト設定の保存エラー", e));
     await siteWriteQueueRef.current;
   }, []);
 
@@ -323,7 +334,7 @@ function useStore() {
     }
     authorWriteQueueRef.current = authorWriteQueueRef.current.then(
       () => db.collection("settings").doc("author").set(toSave)
-    ).catch(e => console.error(e));
+    ).catch(e => notifySaveError("著者プロフィールの保存エラー", e));
     await authorWriteQueueRef.current;
   }, []);
 
@@ -342,13 +353,13 @@ function useStore() {
     novelsRef.current = novelsRef.current.map(n => n.id===id ? {...n,...patch} : n);
     setNovelsLocal(novelsRef.current);
     beginSaving();
-    try { await db.collection("novels").doc(id).update(patch); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(id).update(patch); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
   const deleteNovel = async id => {
     novelsRef.current = novelsRef.current.filter(n => n.id!==id);
     setNovelsLocal(novelsRef.current);
     beginSaving();
-    try { await db.collection("novels").doc(id).delete(); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(id).delete(); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
 
   const addChapter = async nid => {
@@ -360,7 +371,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
     return cid;
   };
 
@@ -377,7 +388,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
     return chid;
   };
   // ドラッグ中は updateCharacterLocal（ローカルstateのみ）で毎フレーム更新し、
@@ -394,7 +405,7 @@ function useStore() {
     const novel = novelsRef.current.find(n => n.id===nid);
     const characters = novel?.characters||[];
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ characters }); } catch(e) { console.error("updateCharacter failed:", e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ characters }); } catch(e) { notifySaveError("人物位置の保存エラー", e); } finally { endSaving(); }
   };
   const updateCharacterLocal = (nid, chid, patch) => {
     // ドラッグ中: novelsRef.current を即時更新してローカル表示だけ更新（Firestore書き込みなし）
@@ -416,7 +427,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[], charRelations: novel?.charRelations||[], charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[], charRelations: novel?.charRelations||[], charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
 
   // ───────── 所属先（グループ）のCRUD ─────────
@@ -432,7 +443,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
     return gid;
   };
   const updateCharGroup = async (nid, gid, patch) => {
@@ -443,7 +454,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
   const toggleCharGroupMember = async (nid, gid, chid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -458,7 +469,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
   const deleteCharGroup = async (nid, gid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -468,7 +479,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
 
   // ───────── キャラクター相関図（関係線）のCRUD ─────────
@@ -485,7 +496,7 @@ function useStore() {
     if(!novel || (novel.characters||[]).length < 2) return null;
     setNovelsLocal(novelsRef.current);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
     return rid;
   };
   const updateCharRelation = async (nid, rid, patch) => {
@@ -496,7 +507,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
   const deleteCharRelation = async (nid, rid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -506,7 +517,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
   const updateChapter = async (nid, cid, patch) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -516,7 +527,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
   const deleteChapter = async (nid, cid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -526,7 +537,7 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     beginSaving();
-    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { console.error(e); } finally { endSaving(); }
+    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
   };
 
   const addMessage = async m => {
@@ -559,7 +570,7 @@ function useStore() {
     setAuthorLocal(a => { nextMurmurs = [m, ...(a.murmurs||[])]; return {...a, murmurs: nextMurmurs}; });
     authorWriteQueueRef.current = authorWriteQueueRef.current.then(
       () => db.collection("settings").doc("author").update({ murmurs: nextMurmurs })
-    ).catch(e => console.error(e));
+    ).catch(e => notifySaveError("ひとりごとの保存エラー", e));
     await authorWriteQueueRef.current;
   };
   const deleteMurmur = async id => {
@@ -567,7 +578,7 @@ function useStore() {
     setAuthorLocal(a => { nextMurmurs = (a.murmurs||[]).filter(m => m.id!==id); return {...a, murmurs: nextMurmurs}; });
     authorWriteQueueRef.current = authorWriteQueueRef.current.then(
       () => db.collection("settings").doc("author").update({ murmurs: nextMurmurs })
-    ).catch(e => console.error(e));
+    ).catch(e => notifySaveError("ひとりごとの削除エラー", e));
     await authorWriteQueueRef.current;
   };
   const updateMurmur = async (id, text) => {
@@ -575,7 +586,7 @@ function useStore() {
     setAuthorLocal(a => { nextMurmurs = (a.murmurs||[]).map(m => m.id===id ? {...m, text} : m); return {...a, murmurs: nextMurmurs}; });
     authorWriteQueueRef.current = authorWriteQueueRef.current.then(
       () => db.collection("settings").doc("author").update({ murmurs: nextMurmurs })
-    ).catch(e => console.error(e));
+    ).catch(e => notifySaveError("ひとりごとの更新エラー", e));
     await authorWriteQueueRef.current;
   };
 
@@ -596,7 +607,7 @@ function useStore() {
     setMotokoStoriesLocal(next);
     motokoWriteQueueRef.current = motokoWriteQueueRef.current.then(
       () => db.collection("settings").doc("motokoStories").set({ items: next })
-    ).catch(e => console.error(e));
+    ).catch(e => notifySaveError("「九十九人の男たち」の保存エラー", e));
     return next;
   }, []);
   const saveMotokoStories = useCallback(async (list) => {
@@ -635,6 +646,7 @@ function useStore() {
   }, [saveMotokoStories]);
 
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
+    saveError, clearSaveError,
     addMessage, deleteMessage, markRead,
     addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
     addCharacter, updateCharacter, updateCharacterLocal, deleteCharacter,
@@ -3198,6 +3210,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
 // ═══════════════ ADMIN ═══════════════
 function AdminPanel({store,onClose}){
   const {site,setSite,author,setAuthor,novels,messages,deleteMessage,markRead,
+    saveError,clearSaveError,
     addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,
     addCharacter,updateCharacter,updateCharacterLocal,deleteCharacter,
     addCharRelation,updateCharRelation,deleteCharRelation,
@@ -3274,6 +3287,13 @@ function AdminPanel({store,onClose}){
 
   return(
     <div className={`admin-overlay fadein${menuSelected?" menu-selected":""}`}>
+      {saveError&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,background:"#7a1f1f",color:"#fff",
+          padding:"10px 16px",fontSize:13,display:"flex",alignItems:"center",gap:12,lineHeight:1.6}}>
+          <span style={{flex:1}}>⚠️ 保存できませんでした：{saveError}</span>
+          <button onClick={clearSaveError} style={{background:"transparent",border:"1px solid rgba(255,255,255,.5)",color:"#fff",padding:"4px 10px",borderRadius:3,cursor:"pointer",fontSize:12}}>閉じる</button>
+        </div>
+      )}
       <div className="admin-sidebar">
         <div className="admin-logo" onClick={onClose} style={{cursor:"pointer"}} title="閲覧ページに戻る"><div className="admin-logo-txt">管理パネル</div><div className="admin-logo-sub" style={{letterSpacing:".2em"}}>← tap to exit</div></div>
         <nav className="admin-nav">
