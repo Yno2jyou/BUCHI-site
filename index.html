@@ -2884,7 +2884,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
               <g key={g.id}>
                 <rect x={g.x} y={g.y} width={g.width} height={g.height} rx="16"
                   fill={g.color||"#c8a86a"} fillOpacity="0.08" stroke={g.color||"#c8a86a"} strokeOpacity="0.5" strokeDasharray="3 4"/>
-                {g.name&&<text x={g.x+10} y={g.y-4} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)" dominantBaseline="auto">{g.name}</text>}
+                {g.name&&<text x={g.x+14} y={g.y-6} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)">{g.name}</text>}
               </g>
             ))}
             {relations.map(r=>{
@@ -3042,16 +3042,16 @@ function AdminPanel({store,onClose}){
   ];
 
   const [menuSelected, setMenuSelected] = useState(false);
-  const adminMainRef = useRef();
-  // セクション切り替えのたびに admin-main エリアの先頭へスクロール
-  // セクション・編集対象が切り替わるたびに admin-main エリアの先頭へスクロール
-  useEffect(()=>{
-    if(adminMainRef.current) adminMainRef.current.scrollTop=0;
-  },[sec, editNid, editCh, editMotokoNum, novelEditTab, menuSelected]);
+  const adminMainRef = useRef(null);
+
+  const scrollAdminTop = () => {
+    if(adminMainRef.current) adminMainRef.current.scrollTop = 0;
+  };
 
   const selectSec = (id) => {
     setSec(id); setEditNid(null); setEditCh(null); setEditMotokoNum(null); setNovelEditTab("info");
     setMenuSelected(true);
+    setTimeout(scrollAdminTop, 0);
   };
   const goBackToMenu = () => setMenuSelected(false);
 
@@ -3072,7 +3072,7 @@ function AdminPanel({store,onClose}){
           {editNid&&(
             <div className="admin-nav-group">
               <span className="admin-nav-label">編集中</span>
-              <button className={`admin-nav-item ${sec==="novel_edit"?"active":""}`} onClick={()=>{ setSec("novel_edit"); setMenuSelected(true); }}>
+              <button className={`admin-nav-item ${sec==="novel_edit"?"active":""}`} onClick={()=>{ setSec("novel_edit"); setMenuSelected(true); setTimeout(scrollAdminTop,0); }}>
                 📝 {eNov?.title||"作品"}
               </button>
             </div>
