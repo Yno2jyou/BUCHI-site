@@ -3227,14 +3227,14 @@ function AdminPanel({store,onClose}){
                       </div>
                     </div>
                     <div className="arow-actions">
-                      <button className="icon-btn primary" onClick={()=>setEditMotokoNum(s.num)}>✏️ 編集</button>
+                      <button className="icon-btn primary" onClick={()=>{ setEditMotokoNum(s.num); setTimeout(scrollAdminTop,0); }}>✏️ 編集</button>
                       <button className="icon-btn danger" disabled={s.num===99} style={{opacity:s.num===99?.3:1,cursor:s.num===99?"not-allowed":"pointer"}}
                         onClick={()=>s.num!==99&&setDelConfirm({type:"motoko",num:s.num,label:s.title})}>🗑</button>
                     </div>
                   </div>
                 ))}
               </div>
-              <button className="btn btn-primary" onClick={async()=>{ const num=await addMotokoStory(); setEditMotokoNum(num); }}>＋ 新しい男を追加</button>
+              <button className="btn btn-primary" onClick={async()=>{ const num=await addMotokoStory(); setEditMotokoNum(num); setTimeout(scrollAdminTop,0); }}>＋ 新しい男を追加</button>
             </div>
           );
         })()}
@@ -3360,14 +3360,14 @@ function AdminPanel({store,onClose}){
                     <div className="arow-actions">
                       <button className={`icon-btn ${n.pinned?"primary":""}`} onClick={()=>updateNovel(n.id,{pinned:!n.pinned})}>{n.pinned?"📌":"📌"} {n.pinned?"固定解除":"固定"}</button>
                       <button className={`icon-btn ${n.locked?"danger":""}`} onClick={()=>updateNovel(n.id,{locked:!n.locked})}>{n.locked?"🔒":"🔓"} {n.locked?"解除":"ロック"}</button>
-                      <button className="icon-btn primary" onClick={()=>{ setEditNid(n.id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); }}>✏️ 編集</button>
+                      <button className="icon-btn primary" onClick={()=>{ setEditNid(n.id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); setTimeout(scrollAdminTop,0); }}>✏️ 編集</button>
                       <button className="icon-btn danger" disabled={!!n.locked} style={{opacity:n.locked?.3:1,cursor:n.locked?"not-allowed":"pointer"}} onClick={()=>!n.locked&&setDelConfirm({type:"novel",id:n.id,label:n.title})}>🗑</button>
                     </div>
                   </div>
                 ));
               })()}
             </div>
-            <button className="btn btn-primary" onClick={async()=>{ const id=await addNovel(); setEditNid(id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); }}>＋ 新しい作品を追加</button>
+            <button className="btn btn-primary" onClick={async()=>{ const id=await addNovel(); setEditNid(id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); setTimeout(scrollAdminTop,0); }}>＋ 新しい作品を追加</button>
           </div>
         )}
 
@@ -3433,7 +3433,7 @@ function AdminPanel({store,onClose}){
             <div style={{marginTop:32,paddingTop:24,borderTop:"1px solid var(--border)"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                 <span className="form-label" style={{margin:0}}>章一覧 ({(eNov.chapters||[]).length}章)</span>
-                <button className="btn btn-primary" style={{padding:"7px 16px",fontSize:11}} onClick={async()=>{ const id=await addChapter(eNov.id); setEditCh({nid:eNov.id,cid:id}); setSec("chapter_edit"); setMenuSelected(true); }}>＋ 章を追加</button>
+                <button className="btn btn-primary" style={{padding:"7px 16px",fontSize:11}} onClick={async()=>{ const id=await addChapter(eNov.id); setEditCh({nid:eNov.id,cid:id}); setSec("chapter_edit"); setMenuSelected(true); setTimeout(scrollAdminTop,0); }}>＋ 章を追加</button>
               </div>
               <div className="ch-list">
                 {(eNov.chapters||[]).length===0&&<div style={{padding:"16px",color:"var(--txt3)",fontSize:12}}>章がありません</div>}
@@ -3441,7 +3441,7 @@ function AdminPanel({store,onClose}){
                   <div key={ch.id} className="ch-row">
                     <span className="ch-num">0{i+1}</span><span className="ch-txt">{ch.title}</span>
                     <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
-                      <button className="icon-btn primary" onClick={()=>{ setEditCh({nid:eNov.id,cid:ch.id}); setSec("chapter_edit"); setMenuSelected(true); }}>✏️</button>
+                      <button className="icon-btn primary" onClick={()=>{ setEditCh({nid:eNov.id,cid:ch.id}); setSec("chapter_edit"); setMenuSelected(true); setTimeout(scrollAdminTop,0); }}>✏️</button>
                       <button className="icon-btn danger" onClick={()=>setDelConfirm({type:"chapter",nid:eNov.id,id:ch.id,label:ch.title})}>🗑</button>
                     </div>
                   </div>
@@ -3489,7 +3489,7 @@ function AdminPanel({store,onClose}){
           return(
             <div className="fadein">
               <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:32}}>
-                <button className="back-link" onClick={()=>setSec("novel_edit")}>← {nov.title}</button>
+                <button className="back-link" onClick={()=>{ setSec("novel_edit"); setTimeout(scrollAdminTop,0); }}>← {nov.title}</button>
                 <div className="admin-title" style={{margin:0}}>章を編集</div>
               </div>
               <div className="form-group"><label className="form-label">章タイトル</label><BufferedInput key={ch.id+":title"} className="form-input" value={ch.title} onCommit={v=>updateChapter(nov.id,ch.id,{title:v})}/></div>
@@ -3518,8 +3518,8 @@ function AdminPanel({store,onClose}){
             <div className="modal-actions">
               <button className="btn" onClick={()=>setDelConfirm(null)}>キャンセル</button>
               <button className="btn btn-danger" onClick={()=>{
-                if(delConfirm.type==="novel"){ deleteNovel(delConfirm.id); setSec("novels"); setEditNid(null); setMenuSelected(true); }
-                if(delConfirm.type==="chapter"){ deleteChapter(delConfirm.nid,delConfirm.id); setSec("novel_edit"); }
+                if(delConfirm.type==="novel"){ deleteNovel(delConfirm.id); setSec("novels"); setEditNid(null); setMenuSelected(true); setTimeout(scrollAdminTop,0); }
+                if(delConfirm.type==="chapter"){ deleteChapter(delConfirm.nid,delConfirm.id); setSec("novel_edit"); setTimeout(scrollAdminTop,0); }
                 if(delConfirm.type==="character"){ deleteCharacter(delConfirm.nid,delConfirm.id); }
                 if(delConfirm.type==="motoko"){ deleteMotokoStory(delConfirm.num); setEditMotokoNum(null); }
                 setDelConfirm(null);
