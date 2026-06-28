@@ -537,15 +537,16 @@ function fmtDate(iso){
 // 「セリフ」として、それ以外の地の文の段落を「地の文」として自動抽出する。
 // 新しい作品が投稿・更新されるたびに novels が変わるので、この関数を
 // 呼ぶたびに最新のプールが再計算される（＝自動更新）。
-const MIN_LINE_LEN = 8;   // あまりに短い断片（記号だけの行など）は候補から除く
+const MIN_LINE_LEN = 20;  // 短すぎる断片を候補から除く（旧: 8）
 const MAX_LINE_LEN = 140; // 長すぎる段落は10選としては読みにくいので除く
 
 // 「〜と〇〇は言った」のように、台詞のすぐ後ろに付く話者表示だけの短い一文は、
 // 単体で読んでも面白みのない断片になりがちなので、地の文10選の候補からは除外する。
-const SPEECH_TAG_RE = /^と[、,]?[^「」、,]{0,6}(は|が|も)?[、,]?(言|答え|呟|囁|叫|笑|頷|聞|尋|告げ|呼びかけ|怒鳴|漏ら|零し|返し|問|思|考え|感じ)[^「」]{0,6}[。.]?$/;
+const SPEECH_TAG_RE = /^と[、,]?[^「」、,]{0,6}(は|が|も)?[、,]?(言|答え|呟|囁|叫|笑|頷|聞|尋|告げ|呼びかけ|怒鳴|漏ら|零し|返し|問|思|考え|感じ)[^「」]{0,10}[。.]?$/;
+const SHORT_SPEECH_TAG_RE = /^(と[^\n]{0,20}(言|答え|呟|囁|叫|笑|頷|返|問)[^\n]{0,8}[。.]?|と[^\n]{0,12}[。.]?)$/;
 function isSpeechTagOnly(text){
-  if(text.length > 20) return false; // 長い場合は話者表示だけでなく実質的な内容を含むとみなす
-  return SPEECH_TAG_RE.test(text);
+  if(text.length > 30) return false; // 長い場合は実質的な内容を含むとみなす
+  return SPEECH_TAG_RE.test(text) || SHORT_SPEECH_TAG_RE.test(text);
 }
 
 function extractTenSenPool(novels){
@@ -2063,7 +2064,7 @@ function CharacterGraph({characters,relations,groups}){
           <g key={g.id}>
             <rect x={g.x} y={g.y} width={g.width} height={g.height} rx="16"
               fill={g.color||"#c8a86a"} fillOpacity="0.08" stroke={g.color||"#c8a86a"} strokeOpacity="0.45" strokeDasharray="3 4"/>
-            {g.name&&<text x={g.x+14} y={g.y+20} className="char-group-label" fill={g.color||"#c8a86a"}>{g.name}</text>}
+            {g.name&&<text x={g.x+10} y={g.y-6} className="char-group-label" fill={g.color||"#c8a86a"}>{g.name}</text>}
           </g>
         ))}
         {edgeRender.map(r=>{
@@ -3753,8 +3754,14 @@ function App(){
     TRANSITIONS[idx](ov,()=>{
       window.scrollTo({top:0,behavior:'instant'});
       document.documentElement.scrollTop=0;
+      document.body.scrollTop=0;
       setPage(dest);
       setVisPage(dest);
+      requestAnimationFrame(()=>{
+        window.scrollTo({top:0,behavior:'instant'});
+        document.documentElement.scrollTop=0;
+        document.body.scrollTop=0;
+      });
       setTimeout(()=>{
         OUTRO[idx](ov);
         setTimeout(()=>{ ov.remove(); setTransiting(false); },850);
