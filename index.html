@@ -3032,6 +3032,22 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     onSelectChar(charId);
   };
 
+  // onMoveChar/onMoveCharEnd は AdminPanel 側でインライン関数として渡されているため、
+  // ドラッグ中に毎フレーム呼ばれる onMoveChar が setState を発生させ AdminPanel が
+  // 再レンダーされるたびに、これらの関数の参照（identity）が変わってしまっていた。
+  // 以前は useEffect の依存配列に onMoveChar/onMoveCharEnd を含めていたため、
+  // ドラッグ中ほぼ毎フレーム window の mousemove/mouseup リスナーが一旦外れて
+  // 再登録される、という状態になっていた。マウスを離す（mouseup）操作がちょうど
+  // リスナーが外れている一瞬に重なると、ドラッグ終了処理（Firestoreへの保存）が
+  // 一切呼ばれないまま終わり、画面上はローカルの位置が変わって見えるのに、
+  // 実際にはサーバーへ保存されていない、という不具合の原因になっていた。
+  // 常に最新の関数を呼べるよう ref で保持し、useEffect の依存配列を dragging のみに
+  // することで、ドラッグ中はリスナーの再登録が起きないようにする。
+  const onMoveCharRef = useRef(onMoveChar);
+  onMoveCharRef.current = onMoveChar;
+  const onMoveCharEndRef = useRef(onMoveCharEnd);
+  onMoveCharEndRef.current = onMoveCharEnd;
+
   useEffect(()=>{
     if(!dragging) return;
     const move = (e) => {
@@ -3046,13 +3062,13 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       // 最終座標を dragRef に記録しながらローカル表示を更新
       d.lastX = Math.round(nx);
       d.lastY = Math.round(ny);
-      onMoveChar(d.charId, d.lastX, d.lastY);
+      onMoveCharRef.current(d.charId, d.lastX, d.lastY);
     };
     const end = () => {
       const d = dragRef.current;
       // lastX/lastY（move で記録した最終座標）を Firestore に保存
-      if(d && onMoveCharEnd && d.lastX != null){
-        onMoveCharEnd(d.charId, d.lastX, d.lastY);
+      if(d && onMoveCharEndRef.current && d.lastX != null){
+        onMoveCharEndRef.current(d.charId, d.lastX, d.lastY);
       }
       dragRef.current=null; setDragging(null);
     };
@@ -3066,7 +3082,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", end);
     };
-  },[dragging, onMoveChar, onMoveCharEnd]);
+  },[dragging]);
 
   // 編集キャンバス上でのグループの背景枠（メンバーの現在位置を囲む矩形）を計算
   const groupBoxes = useMemo(()=>groups.map(g=>{
