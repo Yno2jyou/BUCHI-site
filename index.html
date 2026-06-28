@@ -210,42 +210,11 @@ async function uploadAuthorIcon(dataUri) {
 function useStore() {
   const [site,    setSiteLocal]   = useState(DEFAULT_SITE);
   const [author,  setAuthorLocal] = useState(DEFAULT_AUTHOR);
-  const [novels,  _setNovelsLocal] = useState([]);
-  const novelsRef = useRef([]); // novels の最新値を常に参照できるRef（クロージャ問題対策）
-  // Firestore書き込み中カウンター（onSnapshotの誤発火を防ぐ）。
-  // 以前は真偽値（true/false）の単純なフラグだったが、短時間に複数の
-  // 書き込み（例：相関図で複数キャラを連続ドラッグ）が重なると、
-  // 先に発行した書き込みのタイマーが後発の書き込みより先に「false」へ
-  // 戻してしまい、その隙にサーバーからの古いスナップショットでローカル
-  // データが上書きされ、後発の変更が消えてしまうことがあった。
-  // カウンターにすることで「進行中の書き込みが1件でもあれば無視する」
-  // ようにし、各書き込みは完了時に自分の分だけカウントを減らす。
-  const savingCountRef = useRef(0);
-  const beginSaving = () => { savingCountRef.current++; };
-  const endSaving = () => { savingCountRef.current = Math.max(0, savingCountRef.current-1); };
-  // setNovelsLocalを呼ぶたびに必ずnovelsRef.currentも同期させるラッパー
-  const setNovelsLocal = (updater) => {
-    _setNovelsLocal(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      novelsRef.current = next;
-      return next;
-    });
-  };
+  const [novels,  setNovelsLocal] = useState([]);
   const [messages,setMsgLocal]    = useState([]);
   const [motokoStories, setMotokoStoriesLocal] = useState(MOTOKO_STORIES);
   const [loading, setLoading]     = useState(true);
   const [dbError, setDbError]     = useState(null);
-  // Firestoreへの保存（update/set/delete）が失敗した場合に、その内容を
-  // 画面に表示するためのstate。これまでは catch(e){console.error(e)} で
-  // 握りつぶしていたため、保存に失敗していてもユーザーには「保存できた」
-  // ように見えてしまっていた（権限エラー等で書き込みが拒否された場合に
-  // 特に問題になる）。
-  const [saveError, setSaveError] = useState(null);
-  const notifySaveError = (label, e) => {
-    console.error(label, e);
-    setSaveError(`${label}: ${e?.code||""} ${e?.message||e}`);
-  };
-  const clearSaveError = () => setSaveError(null);
 
   useEffect(() => {
     const unsubs = [];
@@ -263,13 +232,7 @@ function useStore() {
     }, e => { setDbError(e.message); check(); }));
 
     unsubs.push(db.collection("novels").orderBy("createdAt","asc").onSnapshot(snap => {
-      // savingCountRef.current が 0 より大きい間（進行中の書き込みがある間）は
-      // 自分の書き込みによる発火なので無視する
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      if(savingCountRef.current <= 0){
-        novelsRef.current = data;
-        setNovelsLocal(data);
-      }
+      setNovelsLocal(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       check();
     }, e => { setDbError(e.message); check(); }));
 
@@ -294,36 +257,14 @@ function useStore() {
 
   const uid = () => db.collection("_").doc().id;
 
-  // setSite / setAuthor は以前 useCallback の依存配列に site/author を持っていたため、
-  // 短い間隔で連続して呼ばれた場合（例：テーマ設定で複数の色を続けて変更する等）、
-  // 古い site/author をクローズしたままの関数が使われ、後の変更が前の変更を
-  // 取り込まずに上書きしてしまうことがあった。
-  // 対策として、
-  //  (1) setSiteLocal/setAuthorLocal の関数型updaterで常に「直前のReact state」
-  //      を基準に next を計算し、クロージャの古い値に依存しないようにする。
-  //  (2) Firestoreへの書き込みを直前の書き込みのPromiseに繋げて直列実行し、
-  //      ネットワークの状況によって書き込み完了の順序が入れ替わり、後の変更が
-  //      古い内容で上書きされてしまう事態を防ぐ。
-  const siteWriteQueueRef = useRef(Promise.resolve());
   const setSite = useCallback(async v => {
-    let next;
-    setSiteLocal(prev => {
-      next = typeof v === "function" ? v(prev) : v;
-      return next;
-    });
-    siteWriteQueueRef.current = siteWriteQueueRef.current.then(
-      () => db.collection("settings").doc("site").set(next)
-    ).catch(e => notifySaveError("サイト設定の保存エラー", e));
-    await siteWriteQueueRef.current;
-  }, []);
+    const next = typeof v === "function" ? v(site) : v;
+    setSiteLocal(next);
+    try { await db.collection("settings").doc("site").set(next); } catch(e) { console.error(e); }
+  }, [site]);
 
-  const authorWriteQueueRef = useRef(Promise.resolve());
   const setAuthor = useCallback(async v => {
-    let next;
-    setAuthorLocal(prev => {
-      next = typeof v === "function" ? v(prev) : v;
-      return next;
-    });
+    const next = typeof v === "function" ? v(author) : v;
     let toSave = next;
     if (isDataUri(next.icon)) {
       try {
@@ -331,12 +272,11 @@ function useStore() {
         toSave = { ...next, icon: url };
         setAuthorLocal(toSave);
       } catch(e) { console.error(e); }
+    } else {
+      setAuthorLocal(next);
     }
-    authorWriteQueueRef.current = authorWriteQueueRef.current.then(
-      () => db.collection("settings").doc("author").set(toSave)
-    ).catch(e => notifySaveError("著者プロフィールの保存エラー", e));
-    await authorWriteQueueRef.current;
-  }, []);
+    try { await db.collection("settings").doc("author").set(toSave); } catch(e) { console.error(e); }
+  }, [author]);
 
   const addNovel = async () => {
     const now = firebase.firestore.FieldValue.serverTimestamp();
@@ -350,194 +290,124 @@ function useStore() {
     return ref.id;
   };
   const updateNovel = async (id, patch) => {
-    novelsRef.current = novelsRef.current.map(n => n.id===id ? {...n,...patch} : n);
-    setNovelsLocal(novelsRef.current);
-    beginSaving();
-    try { await db.collection("novels").doc(id).update(patch); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    setNovelsLocal(a => a.map(n => n.id===id ? {...n,...patch} : n));
+    try { await db.collection("novels").doc(id).update(patch); } catch(e) { console.error(e); }
   };
   const deleteNovel = async id => {
-    novelsRef.current = novelsRef.current.filter(n => n.id!==id);
-    setNovelsLocal(novelsRef.current);
-    beginSaving();
-    try { await db.collection("novels").doc(id).delete(); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    setNovelsLocal(a => a.filter(n => n.id!==id));
+    try { await db.collection("novels").doc(id).delete(); } catch(e) { console.error(e); }
   };
 
   const addChapter = async nid => {
     const cid = uid();
     const ch = { id: cid, title:"新しい章", content:"" };
-    novelsRef.current = novelsRef.current.map(n =>
-      n.id!==nid ? n : {...n, chapters:[...(n.chapters||[]), ch]}
-    );
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = [...(novel?.chapters||[]), ch];
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
     return cid;
   };
 
   // ───────── 登場人物（キャラクター解説）のCRUD ─────────
   const addCharacter = async nid => {
     const chid = uid();
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const idx = (n.characters||[]).length;
-      const ch = { id: chid, name:"新しい人物", role:"", description:"",
-        x: 120 + (idx % 4) * 140, y: 100 + Math.floor(idx / 4) * 140 };
-      return {...n, characters:[...(n.characters||[]), ch]};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const idx = (novel?.characters||[]).length;
+    const ch = { id: chid, name:"新しい人物", role:"", description:"",
+      // 相関図エディタ上の初期座標。重ならないよう少しずつズラして配置する
+      x: 120 + (idx % 4) * 140, y: 100 + Math.floor(idx / 4) * 140 };
+    const updated = [...(novel?.characters||[]), ch];
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
     return chid;
   };
-  // ドラッグ中は updateCharacterLocal（ローカルstateのみ）で毎フレーム更新し、
-  // ドラッグ終了時に updateCharacter（Firestore書き込み）を一度だけ呼ぶ。
-  // これにより onSnapshot との競合を防ぎ、座標が保存されるようにする。
   const updateCharacter = async (nid, chid, patch) => {
-    // novelsRef.current を即時更新してから Firestore に書き込む
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const updated = (n.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
-      return {...n, characters: updated};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    const characters = novel?.characters||[];
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ characters }); } catch(e) { notifySaveError("人物位置の保存エラー", e); } finally { endSaving(); }
-  };
-  const updateCharacterLocal = (nid, chid, patch) => {
-    // ドラッグ中: novelsRef.current を即時更新してローカル表示だけ更新（Firestore書き込みなし）
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const updated = (n.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
-      return {...n, characters: updated};
-    });
-    setNovelsLocal(novelsRef.current);
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
   };
   const deleteCharacter = async (nid, chid) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const characters = (n.characters||[]).filter(c => c.id!==chid);
-      const charRelations = (n.charRelations||[]).filter(r => r.fromId!==chid && r.toId!==chid);
-      const charGroups = (n.charGroups||[]).map(g => ({...g, memberIds:(g.memberIds||[]).filter(id=>id!==chid)}));
-      return {...n, characters, charRelations, charGroups};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[], charRelations: novel?.charRelations||[], charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.characters||[]).filter(c => c.id!==chid);
+    // この人物が絡む相関線も一緒に削除する
+    const updatedRel = (novel?.charRelations||[]).filter(r => r.fromId!==chid && r.toId!==chid);
+    // この人物が所属していたグループのメンバーからも除外する
+    const updatedGroups = (novel?.charGroups||[]).map(g => ({...g, memberIds:(g.memberIds||[]).filter(id=>id!==chid)}));
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated, charRelations:updatedRel, charGroups:updatedGroups} : n));
+    try { await db.collection("novels").doc(nid).update({ characters: updated, charRelations: updatedRel, charGroups: updatedGroups }); } catch(e) { console.error(e); }
   };
 
   // ───────── 所属先（グループ）のCRUD ─────────
   const addCharGroup = async nid => {
     const gid = uid();
     const COLORS=["#c8a86a","#8b5cf6","#f59e0b","#38bdf8","#f87171","#4ade80"];
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const idx = (n.charGroups||[]).length;
-      const g = { id: gid, name:"新しいグループ", color:COLORS[idx%COLORS.length], memberIds:[] };
-      return {...n, charGroups:[...(n.charGroups||[]), g]};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const idx = (novel?.charGroups||[]).length;
+    const g = { id: gid, name:"新しいグループ", color:COLORS[idx%COLORS.length], memberIds:[] };
+    const updated = [...(novel?.charGroups||[]), g];
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
     return gid;
   };
   const updateCharGroup = async (nid, gid, patch) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      return {...n, charGroups:(n.charGroups||[]).map(g => g.id===gid ? {...g,...patch} : g)};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.charGroups||[]).map(g => g.id===gid ? {...g,...patch} : g);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
   };
   const toggleCharGroupMember = async (nid, gid, chid) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const charGroups = (n.charGroups||[]).map(g => {
-        if(g.id!==gid) return g;
-        const has = (g.memberIds||[]).includes(chid);
-        return { ...g, memberIds: has ? g.memberIds.filter(id=>id!==chid) : [...(g.memberIds||[]), chid] };
-      });
-      return {...n, charGroups};
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.charGroups||[]).map(g => {
+      if(g.id!==gid) return g;
+      const has = (g.memberIds||[]).includes(chid);
+      return { ...g, memberIds: has ? g.memberIds.filter(id=>id!==chid) : [...(g.memberIds||[]), chid] };
     });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
   };
   const deleteCharGroup = async (nid, gid) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      return {...n, charGroups:(n.charGroups||[]).filter(g => g.id!==gid)};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.charGroups||[]).filter(g => g.id!==gid);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
   };
 
   // ───────── キャラクター相関図（関係線）のCRUD ─────────
   const addCharRelation = async nid => {
+    const novel = novels.find(n => n.id===nid);
+    const chars = novel?.characters||[];
+    if(chars.length < 2) return null;
     const rid = uid();
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      const chars = n.characters||[];
-      if(chars.length < 2) return n;
-      const rel = { id: rid, fromId: chars[0].id, toId: chars[1].id, label:"", color:"#c8a86a", arrowType:"none" };
-      return {...n, charRelations:[...(n.charRelations||[]), rel]};
-    });
-    const novel = novelsRef.current.find(n => n.id===nid);
-    if(!novel || (novel.characters||[]).length < 2) return null;
-    setNovelsLocal(novelsRef.current);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const rel = { id: rid, fromId: chars[0].id, toId: chars[1].id, label:"", color:"#c8a86a", arrowType:"none" };
+    const updated = [...(novel?.charRelations||[]), rel];
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
     return rid;
   };
   const updateCharRelation = async (nid, rid, patch) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      return {...n, charRelations:(n.charRelations||[]).map(r => r.id===rid ? {...r,...patch} : r)};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.charRelations||[]).map(r => r.id===rid ? {...r,...patch} : r);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
   };
   const deleteCharRelation = async (nid, rid) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      return {...n, charRelations:(n.charRelations||[]).filter(r => r.id!==rid)};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.charRelations||[]).filter(r => r.id!==rid);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
   };
   const updateChapter = async (nid, cid, patch) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      return {...n, chapters:(n.chapters||[]).map(c => c.id===cid ? {...c,...patch} : c)};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.chapters||[]).map(c => c.id===cid ? {...c,...patch} : c);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
   };
   const deleteChapter = async (nid, cid) => {
-    novelsRef.current = novelsRef.current.map(n => {
-      if(n.id !== nid) return n;
-      return {...n, chapters:(n.chapters||[]).filter(c => c.id!==cid)};
-    });
-    setNovelsLocal(novelsRef.current);
-    const novel = novelsRef.current.find(n => n.id===nid);
-    beginSaving();
-    try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { notifySaveError("保存エラー", e); } finally { endSaving(); }
+    const novel = novels.find(n => n.id===nid);
+    const updated = (novel?.chapters||[]).filter(c => c.id!==cid);
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
   };
 
   const addMessage = async m => {
@@ -554,11 +424,6 @@ function useStore() {
     try { await db.collection("messages").doc(id).update({ read: true }); } catch(e) { console.error(e); }
   };
 
-  // addMurmur/deleteMurmur/updateMurmur は author.murmurs を直接書き換えるため、
-  // setAuthor と同じ settings/author ドキュメントを更新する。
-  // 以前は author（クロージャ変数）から murmurs を読んでいたため、setAuthor の
-  // 書き込みと競合するレースコンディションがあった。authorWriteQueueRef で
-  // 直列化し、setAuthorLocal の関数型updaterで常に最新のstateを基準にする。
   const addMurmur = async (text, files) => {
     const mid = uid();
     const now = new Date();
@@ -566,28 +431,19 @@ function useStore() {
     try { uploadedFiles = await uploadMurmurFiles(mid, files||[]); }
     catch(e) { console.error(e); uploadedFiles = files||[]; }
     const m = { id: mid, text, files: uploadedFiles, date: now.toLocaleString("ja-JP"), isoDate: now.toISOString() };
-    let nextMurmurs;
-    setAuthorLocal(a => { nextMurmurs = [m, ...(a.murmurs||[])]; return {...a, murmurs: nextMurmurs}; });
-    authorWriteQueueRef.current = authorWriteQueueRef.current.then(
-      () => db.collection("settings").doc("author").update({ murmurs: nextMurmurs })
-    ).catch(e => notifySaveError("ひとりごとの保存エラー", e));
-    await authorWriteQueueRef.current;
+    const nextMurmurs = [m, ...(author.murmurs||[])];
+    setAuthorLocal(a => ({...a, murmurs: nextMurmurs}));
+    try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
   };
   const deleteMurmur = async id => {
-    let nextMurmurs;
-    setAuthorLocal(a => { nextMurmurs = (a.murmurs||[]).filter(m => m.id!==id); return {...a, murmurs: nextMurmurs}; });
-    authorWriteQueueRef.current = authorWriteQueueRef.current.then(
-      () => db.collection("settings").doc("author").update({ murmurs: nextMurmurs })
-    ).catch(e => notifySaveError("ひとりごとの削除エラー", e));
-    await authorWriteQueueRef.current;
+    const nextMurmurs = (author.murmurs||[]).filter(m => m.id!==id);
+    setAuthorLocal(a => ({...a, murmurs: nextMurmurs}));
+    try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
   };
   const updateMurmur = async (id, text) => {
-    let nextMurmurs;
-    setAuthorLocal(a => { nextMurmurs = (a.murmurs||[]).map(m => m.id===id ? {...m, text} : m); return {...a, murmurs: nextMurmurs}; });
-    authorWriteQueueRef.current = authorWriteQueueRef.current.then(
-      () => db.collection("settings").doc("author").update({ murmurs: nextMurmurs })
-    ).catch(e => notifySaveError("ひとりごとの更新エラー", e));
-    await authorWriteQueueRef.current;
+    const nextMurmurs = (author.murmurs||[]).map(m => m.id===id ? {...m, text} : m);
+    setAuthorLocal(a => ({...a, murmurs: nextMurmurs}));
+    try { await db.collection("settings").doc("author").update({ murmurs: nextMurmurs }); } catch(e) { console.error(e); }
   };
 
   // ───────── 「すれ違い」(九十九人の男たち) 物語データのCRUD ─────────
@@ -598,58 +454,41 @@ function useStore() {
     return ending ? [...rest, { ...ending, num: 99 }] : rest;
   };
 
-  // motokoStories 関連も同様に、クロージャの古い motokoStories を参照すると
-  // 連続更新時に競合するため、setMotokoStoriesLocal の関数型updaterで常に
-  // 最新のstateを基準にし、Firestoreへの書き込みはキューで直列化する。
-  const motokoWriteQueueRef = useRef(Promise.resolve());
-  const saveMotokoStoriesList = useCallback((list) => {
+  const saveMotokoStories = useCallback(async (list) => {
     const next = renumber(list);
     setMotokoStoriesLocal(next);
-    motokoWriteQueueRef.current = motokoWriteQueueRef.current.then(
-      () => db.collection("settings").doc("motokoStories").set({ items: next })
-    ).catch(e => notifySaveError("「九十九人の男たち」の保存エラー", e));
+    try { await db.collection("settings").doc("motokoStories").set({ items: next }); }
+    catch(e) { console.error(e); }
     return next;
   }, []);
-  const saveMotokoStories = useCallback(async (list) => {
-    const next = saveMotokoStoriesList(list);
-    await motokoWriteQueueRef.current;
-    return next;
-  }, [saveMotokoStoriesList]);
 
   const updateMotokoStory = useCallback(async (num, patch) => {
-    let next;
-    setMotokoStoriesLocal(prev => { next = prev.map(s => s.num===num ? {...s, ...patch} : s); return prev; });
+    const next = motokoStories.map(s => s.num===num ? {...s, ...patch} : s);
     await saveMotokoStories(next);
-  }, [saveMotokoStories]);
+  }, [motokoStories, saveMotokoStories]);
 
   const addMotokoStory = useCallback(async () => {
     // 「終わりの男」の直前に新しい男を1人追加し、1〜99で詰め直す
     const newOne = { num: 0, cat:"未分類", title:"新しい男", text:"ここに物語を書いてください。" };
-    let next;
-    setMotokoStoriesLocal(prev => {
-      const withoutEnding = prev.filter(s=>s.num!==99);
-      const ending = prev.find(s=>s.num===99);
-      next = ending ? [...withoutEnding, newOne, ending] : [...withoutEnding, newOne];
-      return prev;
-    });
+    const withoutEnding = motokoStories.filter(s=>s.num!==99);
+    const ending = motokoStories.find(s=>s.num===99);
+    const next = ending ? [...withoutEnding, newOne, ending] : [...withoutEnding, newOne];
     const saved = await saveMotokoStories(next);
     // 追加された人のnumを返す（直後に編集画面を開くため）
     const added = saved[saved.length-2] || saved[saved.length-1];
     return added.num;
-  }, [saveMotokoStories]);
+  }, [motokoStories, saveMotokoStories]);
 
   const deleteMotokoStory = useCallback(async (num) => {
     if(num===99) return; // 終わりの男は削除不可
-    let next;
-    setMotokoStoriesLocal(prev => { next = prev.filter(s=>s.num!==num); return prev; });
+    const next = motokoStories.filter(s=>s.num!==num);
     await saveMotokoStories(next);
-  }, [saveMotokoStories]);
+  }, [motokoStories, saveMotokoStories]);
 
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
-    saveError, clearSaveError,
     addMessage, deleteMessage, markRead,
     addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
-    addCharacter, updateCharacter, updateCharacterLocal, deleteCharacter,
+    addCharacter, updateCharacter, deleteCharacter,
     addCharRelation, updateCharRelation, deleteCharRelation,
     addCharGroup, updateCharGroup, deleteCharGroup, toggleCharGroupMember,
     addMurmur, deleteMurmur, updateMurmur,
@@ -701,11 +540,11 @@ function fmtDate(iso){
 const MIN_LINE_LEN = 8;   // あまりに短い断片（記号だけの行など）は候補から除く
 const MAX_LINE_LEN = 140; // 長すぎる段落は10選としては読みにくいので除く
 
-// 「〜と〇〇は言った」「と訊いた。」のように台詞直後に付く話者表示だけの断片は
-// 単体で読んでも意味をなさないため地の文10選の候補から除外する。
-// 「と」で始まり30文字以下の場合を話者表示断片とみなす（30文字超は情景描写を含む可能性があるため通過）。
-const SPEECH_TAG_RE = /^と[^「」]{1,29}[。.!！?？]?$/;
+// 「〜と〇〇は言った」のように、台詞のすぐ後ろに付く話者表示だけの短い一文は、
+// 単体で読んでも面白みのない断片になりがちなので、地の文10選の候補からは除外する。
+const SPEECH_TAG_RE = /^と[、,]?[^「」、,]{0,6}(は|が|も)?[、,]?(言|答え|呟|囁|叫|笑|頷|聞|尋|告げ|呼びかけ|怒鳴|漏ら|零し|返し|問|思|考え|感じ)[^「」]{0,6}[。.]?$/;
 function isSpeechTagOnly(text){
+  if(text.length > 20) return false; // 長い場合は話者表示だけでなく実質的な内容を含むとみなす
   return SPEECH_TAG_RE.test(text);
 }
 
@@ -770,112 +609,71 @@ function rectsOverlap(a, b){
 // ノードの位置（円アイコン自体）は著者が配置した意味のある情報なので動かさず、
 // 「ラベルをどちら向きにずらすか」だけを調整することで重なりを避ける。
 function layoutGraphLabels({characters, relations, px, py, nodeRadius=24}){
-  // 障害物リスト（ノード円 + 確定済みラベル矩形）
-  const obstacles = [];
+  const placedBoxes = []; // これまでに確定した「これ以上重ねてはいけない」矩形の一覧
   const nodePos = {};
 
-  // ① ノード円を障害物として登録
+  // ① まずすべてのノード（アイコン）自体を、動かせない障害物として確保する
   characters.forEach(c=>{
     const cx=px(c.x), cy=py(c.y);
     nodePos[c.id] = {cx, cy};
-    // 円の代わりに少し大きめの矩形で近似（ラベルが円に被らないよう余裕を持たせる）
-    const r = nodeRadius + 4;
-    obstacles.push({x:cx-r, y:cy-r, w:r*2, h:r*2});
+    placedBoxes.push({x:cx-nodeRadius, y:cy-nodeRadius, w:nodeRadius*2, h:nodeRadius*2});
   });
 
-  // 矩形の重なり判定（マージンつき）
-  function overlaps(box, margin=2){
-    return obstacles.some(o=>
-      box.x < o.x+o.w+margin && box.x+box.w > o.x-margin &&
-      box.y < o.y+o.h+margin && box.y+box.h > o.y-margin
-    );
-  }
-  // 矩形同士の最近距離（重なっている場合は0）
-  function minDist(box){
-    let d = Infinity;
-    for(const o of obstacles){
-      const dx = Math.max(0, Math.max(o.x-(box.x+box.w), box.x-(o.x+o.w)));
-      const dy = Math.max(0, Math.max(o.y-(box.y+box.h), box.y-(o.y+o.h)));
-      d = Math.min(d, Math.hypot(dx,dy));
-    }
-    return d;
-  }
-
-  // ② ノード名ラベルを配置する
-  // 8方向 × 複数距離の候補を生成し、重ならない最も近い位置を選ぶ
+  // ② 各ノードの名前ラベルを、重ならない位置に配置する（下→上→右→左→斜めの順に候補を試す）
   const nodeRender = characters.map(c=>{
     const {cx,cy} = nodePos[c.id];
-    const lw = Math.max(28, (c.name||"").length * 14);
-    const lh = 18;
-    // 8方向の角度と基準オフセット
-    const dirs = [
-      [0,1],[0,-1],[1,0],[-1,0],
-      [0.7,0.7],[-0.7,0.7],[0.7,-0.7],[-0.7,-0.7]
+    const labelW = Math.max(26, (c.name||"").length * 13);
+    const labelH = 16;
+    const candidates = [
+      {x:cx-labelW/2, y:cy+nodeRadius+8},                          // 下（デフォルト）
+      {x:cx-labelW/2, y:cy-nodeRadius-8-labelH},                    // 上
+      {x:cx+nodeRadius+10, y:cy-labelH/2},                          // 右
+      {x:cx-nodeRadius-10-labelW, y:cy-labelH/2},                   // 左
+      {x:cx-labelW/2, y:cy+nodeRadius+8+labelH+6},                  // さらに下
+      {x:cx+nodeRadius+10, y:cy+nodeRadius+8},                      // 右下
+      {x:cx-nodeRadius-10-labelW, y:cy+nodeRadius+8},               // 左下
+      {x:cx+nodeRadius+10, y:cy-nodeRadius-8-labelH},               // 右上
+      {x:cx-nodeRadius-10-labelW, y:cy-nodeRadius-8-labelH},        // 左上
+      {x:cx-labelW/2, y:cy+nodeRadius+8+(labelH+6)*2},              // さらにさらに下
     ];
-    const baseD = nodeRadius + 8;
-    let best = null, bestScore = -Infinity;
-    for(const [dx,dy] of dirs){
-      for(const dist of [baseD, baseD+lh+6, baseD+(lh+6)*2]){
-        const bx = cx + dx*dist - lw/2;
-        const by = cy + dy*dist - lh/2;
-        const box = {x:bx, y:by, w:lw, h:lh};
-        if(!overlaps(box)){
-          // 重ならないなら距離スコア最大（最も近い位置を優先）
-          const score = 1000 - dist;
-          if(score > bestScore){ bestScore=score; best=box; }
-        } else {
-          // 重なる場合は最も重なりが少ない（最近距離が大きい）候補を保持
-          const score = minDist(box) - 1000;
-          if(score > bestScore){ bestScore=score; best=box; }
-        }
-      }
+    // 候補の中から「重なりが発生しないもの」を優先して選び、すべて重なる場合は
+    // 重なりの個数が最も少ない候補（＝もっとも見え方が崩れにくい候補）にフォールバックする
+    let chosen = candidates[0], bestOverlapCount = Infinity;
+    for(const cand of candidates){
+      const box={x:cand.x,y:cand.y,w:labelW,h:labelH};
+      const overlapCount = placedBoxes.filter(p=>rectsOverlap(p,box)).length;
+      if(overlapCount===0){ chosen=cand; bestOverlapCount=0; break; }
+      if(overlapCount<bestOverlapCount){ chosen=cand; bestOverlapCount=overlapCount; }
     }
-    if(!best){ best = {x:cx-lw/2, y:cy+nodeRadius+8, w:lw, h:lh}; }
-    obstacles.push(best);
-    return { id:c.id, cx, cy, labelCx: best.x+lw/2, labelCy: best.y+lh/2+4 };
+    placedBoxes.push({x:chosen.x,y:chosen.y,w:labelW,h:labelH});
+    return { id:c.id, cx, cy, labelCx: chosen.x+labelW/2, labelCy: chosen.y+labelH/2+4 };
   });
 
-  // ③ 関係線ラベルを配置する
-  // 線上の3点（25%・50%・75%）× 直交方向±複数オフセットの候補から最適を選ぶ
+  // ③ 関係線のラベルを、重ならない位置に配置する（線の中点から垂直方向に少しずつずらして候補を試す）
   const edgeRender = relations.map(r=>{
     const a=nodePos[r.fromId], b=nodePos[r.toId];
     if(!a||!b) return { ...r, show:false };
     const x1=a.cx, y1=a.cy, x2=b.cx, y2=b.cy;
-    if(!r.label) return { ...r, show:true, x1,y1,x2,y2, hasLabel:false };
-
+    if(!r.label){
+      return { ...r, show:true, x1,y1,x2,y2, hasLabel:false };
+    }
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
     const dx=x2-x1, dy=y2-y1;
     const len=Math.max(1, Math.hypot(dx,dy));
-    const ux=dx/len, uy=dy/len;   // 線方向の単位ベクトル
-    const nx=-uy,   ny=ux;        // 直交方向
-
-    const lw = Math.max(24, r.label.length * 11);
-    const lh = 18;
-
-    // 候補：線上3点 × 直交±7段階
-    const tPoints = [0.5, 0.35, 0.65, 0.2, 0.8];
-    const offsets = [0, 16, -16, 32, -32, 48, -48, 64, -64];
-    let best = null, bestScore = -Infinity;
-
-    for(const t of tPoints){
-      const mx = x1 + dx*t;
-      const my = y1 + dy*t;
-      for(const off of offsets){
-        const lx = mx + nx*off;
-        const ly = my + ny*off;
-        const box = {x:lx-lw/2, y:ly-lh/2, w:lw, h:lh};
-        if(!overlaps(box)){
-          const score = 1000 - Math.abs(off) - Math.abs(t-0.5)*50;
-          if(score > bestScore){ bestScore=score; best=box; }
-        } else {
-          const score = minDist(box) - 1000 - Math.abs(off);
-          if(score > bestScore){ bestScore=score; best=box; }
-        }
-      }
+    const nx=-dy/len, ny=dx/len; // 線に直交する単位ベクトル
+    const labelW = Math.max(22, r.label.length * 10);
+    const labelH = 16;
+    let chosen = {x:mx-labelW/2, y:my-labelH/2}, bestOverlapCount=Infinity;
+    for(let i=0;i<9;i++){
+      const offset = i===0 ? 0 : Math.ceil(i/2)*15*(i%2===0?1:-1);
+      const lx=mx+nx*offset, ly=my+ny*offset;
+      const box={x:lx-labelW/2, y:ly-labelH/2, w:labelW, h:labelH};
+      const overlapCount = placedBoxes.filter(p=>rectsOverlap(p,box)).length;
+      if(overlapCount===0){ chosen={x:box.x,y:box.y}; placedBoxes.push(box); bestOverlapCount=0; break; }
+      if(overlapCount<bestOverlapCount){ chosen={x:box.x,y:box.y}; bestOverlapCount=overlapCount; }
+      if(i===8){ placedBoxes.push({x:chosen.x,y:chosen.y,w:labelW,h:labelH}); }
     }
-    if(!best){ best={x:x1+(dx*0.5)-lw/2, y:y1+(dy*0.5)-lh/2, w:lw, h:lh}; }
-    obstacles.push(best);
-    return { ...r, show:true, x1,y1,x2,y2, hasLabel:true,
-      labelCx:best.x+lw/2, labelCy:best.y+lh/2, labelW:lw, labelH:lh };
+    return { ...r, show:true, x1,y1,x2,y2, hasLabel:true, labelCx:chosen.x+labelW/2, labelCy:chosen.y+labelH/2, labelW, labelH };
   });
 
   return { nodeRender, edgeRender };
@@ -1415,7 +1213,6 @@ function Styles({site, lightMode}){
     .char-btn-icon{font-size:13px}
     .char-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:960;display:flex;align-items:flex-start;justify-content:center;padding:60px 24px;overflow-y:auto}
     .char-modal{width:100%;max-width:760px;background:var(--bg);border:1px solid var(--border-hi);border-radius:3px;padding:36px 40px 44px;position:relative;margin-bottom:60px}
-    .char-modal.graph-tab{max-width:980px}
     .char-modal-close{position:absolute;top:18px;right:18px;background:none;border:none;color:var(--txt3);font-size:22px;cursor:pointer;line-height:1;padding:4px;transition:color .2s}
     .char-modal-close:hover{color:var(--txt)}
     .char-modal-title{font-family:var(--serif);font-size:22px;font-weight:300;color:var(--txt);letter-spacing:.1em;margin-bottom:6px}
@@ -1435,13 +1232,13 @@ function Styles({site, lightMode}){
     .char-card-group-tag{font-size:10px;color:var(--txt3);letter-spacing:.05em;border:1px solid var(--border-hi);border-radius:10px;padding:2px 9px}
 
     /* ═══ キャラクター相関図（閲覧用） ═══ */
-    .char-graph-wrap{width:100%;overflow:auto;border:1px solid var(--border);border-radius:2px;background:color-mix(in srgb,var(--bg) 94%,#fff 1%);margin-bottom:8px;min-height:500px}
+    .char-graph-wrap{width:100%;overflow:auto;border:1px solid var(--border);border-radius:2px;background:color-mix(in srgb,var(--bg) 94%,#fff 1%);margin-bottom:8px}
     .char-graph-svg{display:block}
     .char-node-circle{stroke-width:1.5;fill-opacity:.16}
-    .char-node-label{font-family:var(--serif);font-size:13px;fill:var(--txt);text-anchor:middle;pointer-events:none}
-    .char-edge-label{font-family:var(--body);font-size:11px;fill:var(--txt2);text-anchor:middle;pointer-events:none;letter-spacing:.02em}
-    .char-edge-label-bg{fill:var(--bg);opacity:.9}
-    .char-group-label{font-family:var(--body);font-size:12px;letter-spacing:.04em}
+    .char-node-label{font-family:var(--serif);font-size:12px;fill:var(--txt);text-anchor:middle;pointer-events:none}
+    .char-edge-label{font-family:var(--body);font-size:10px;fill:var(--txt2);text-anchor:middle;pointer-events:none;letter-spacing:.02em}
+    .char-edge-label-bg{fill:var(--bg);opacity:.88}
+    .char-group-label{font-family:var(--body);font-size:11px;letter-spacing:.04em}
 
     /* ═══ キャラクター相関図エディタ（管理画面） ═══ */
     .char-editor-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
@@ -2180,7 +1977,7 @@ function CharacterModal({novel,onClose}){
   },[onClose]);
   return(
     <div className="char-modal-bg" onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div className={`char-modal fadein${tab==="graph"?" graph-tab":""}`}>
+      <div className="char-modal fadein">
         <button className="char-modal-close" onClick={onClose}>✕</button>
         <div className="char-modal-title">登場人物</div>
         <div className="char-modal-sub">{novel.title}</div>
@@ -2227,17 +2024,17 @@ function CharacterGraph({characters,relations,groups}){
   if(characters.length===0) return null;
   // 登場人物が多いほどキャンバスを広げ、ラベルが重なりにくいよう余裕を持たせる
   const extra = Math.max(0, characters.length-6);
-  const W = Math.min(900 + extra*80, 1600);
-  const H = Math.min(600 + extra*56, 1100);
+  const W = Math.min(680 + extra*70, 1300);
+  const H = Math.min(440 + extra*46, 860);
   const byId=Object.fromEntries(characters.map(c=>[c.id,c]));
   const xs=characters.map(c=>c.x??100);
   const ys=characters.map(c=>c.y??100);
   const minX=Math.min(...xs), maxX=Math.max(...xs);
   const minY=Math.min(...ys), maxY=Math.max(...ys);
-  const pad=90;
+  const pad=70;
   const spanX=Math.max(maxX-minX,1), spanY=Math.max(maxY-minY,1);
   const scaleX=(W-pad*2)/spanX, scaleY=(H-pad*2)/spanY;
-  const scale=Math.min(scaleX,scaleY,2.2);
+  const scale=Math.min(scaleX,scaleY,1.4);
   // scaleX/scaleYのうち小さい方が採用されるため、もう一方の軸には余白(slack)が残る。
   // その余白を中央寄せに使うことで、描画内容が常にviewBoxの中心に来るようにする。
   const usedW=spanX*scale, usedH=spanY*scale;
@@ -2261,12 +2058,12 @@ function CharacterGraph({characters,relations,groups}){
 
   return(
     <div className="char-graph-wrap">
-      <svg className="char-graph-svg" viewBox={`0 0 ${W} ${H}`} width="100%" style={{minHeight:500}}>
+      <svg className="char-graph-svg" viewBox={`0 0 ${W} ${H}`} width="100%" style={{minHeight:300}}>
         {groupBoxes.map(g=>(
           <g key={g.id}>
             <rect x={g.x} y={g.y} width={g.width} height={g.height} rx="16"
               fill={g.color||"#c8a86a"} fillOpacity="0.08" stroke={g.color||"#c8a86a"} strokeOpacity="0.45" strokeDasharray="3 4"/>
-            {g.name&&<text x={g.x+14} y={g.y-6} className="char-group-label" fill={g.color||"#c8a86a"}>{g.name}</text>}
+            {g.name&&<text x={g.x+14} y={g.y+20} className="char-group-label" fill={g.color||"#c8a86a"}>{g.name}</text>}
           </g>
         ))}
         {edgeRender.map(r=>{
@@ -2997,7 +2794,7 @@ function CharacterAdminList({novel, onAdd, onUpdate, onDelete}){
 // ═══════════════ キャラクター相関図エディタ（作品編集タブ） ═══════════════
 // 著者がキャラクターをドラッグして自由に配置し、人物間に関係線（ラベル付き）を引ける本格エディタ。
 // 座標はキャラクターの x,y フィールドにそのまま保存され、読者側 CharacterGraph はこの座標を読み取って描画する。
-function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, onMoveCharEnd, onAddRelation, onUpdateRelation, onDeleteRelation, onAddGroup, onUpdateGroup, onDeleteGroup, onToggleGroupMember}){
+function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, onAddRelation, onUpdateRelation, onDeleteRelation, onAddGroup, onUpdateGroup, onDeleteGroup, onToggleGroupMember}){
   const characters = novel.characters||[];
   const relations = novel.charRelations||[];
   const groups = novel.charGroups||[];
@@ -3022,31 +2819,10 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     if(!rect||!c) return;
     const clientX = e.touches?e.touches[0].clientX:e.clientX;
     const clientY = e.touches?e.touches[0].clientY:e.clientY;
-    // scrollLeft/Top を加算してスクロール量を考慮する
-    const scrollEl = stageRef.current?.parentElement;
-    const scrollLeft = scrollEl?.scrollLeft||0;
-    const scrollTop  = scrollEl?.scrollTop||0;
-    dragRef.current = { charId, startX:clientX, startY:clientY, origX:c.x??100, origY:c.y??100,
-      canvasW, canvasH, scrollLeft, scrollTop };
+    dragRef.current = { charId, startX:clientX, startY:clientY, origX:c.x??100, origY:c.y??100, rectW:rect.width, rectH:rect.height };
     setDragging(charId);
     onSelectChar(charId);
   };
-
-  // onMoveChar/onMoveCharEnd は AdminPanel 側でインライン関数として渡されているため、
-  // ドラッグ中に毎フレーム呼ばれる onMoveChar が setState を発生させ AdminPanel が
-  // 再レンダーされるたびに、これらの関数の参照（identity）が変わってしまっていた。
-  // 以前は useEffect の依存配列に onMoveChar/onMoveCharEnd を含めていたため、
-  // ドラッグ中ほぼ毎フレーム window の mousemove/mouseup リスナーが一旦外れて
-  // 再登録される、という状態になっていた。マウスを離す（mouseup）操作がちょうど
-  // リスナーが外れている一瞬に重なると、ドラッグ終了処理（Firestoreへの保存）が
-  // 一切呼ばれないまま終わり、画面上はローカルの位置が変わって見えるのに、
-  // 実際にはサーバーへ保存されていない、という不具合の原因になっていた。
-  // 常に最新の関数を呼べるよう ref で保持し、useEffect の依存配列を dragging のみに
-  // することで、ドラッグ中はリスナーの再登録が起きないようにする。
-  const onMoveCharRef = useRef(onMoveChar);
-  onMoveCharRef.current = onMoveChar;
-  const onMoveCharEndRef = useRef(onMoveCharEnd);
-  onMoveCharEndRef.current = onMoveCharEnd;
 
   useEffect(()=>{
     if(!dragging) return;
@@ -3057,21 +2833,11 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       const clientX = e.touches?e.touches[0].clientX:e.clientX;
       const clientY = e.touches?e.touches[0].clientY:e.clientY;
       const dx = clientX - d.startX, dy = clientY - d.startY;
-      const nx = Math.max(24, Math.min(d.canvasW-24, d.origX + dx));
-      const ny = Math.max(24, Math.min(d.canvasH-24, d.origY + dy));
-      // 最終座標を dragRef に記録しながらローカル表示を更新
-      d.lastX = Math.round(nx);
-      d.lastY = Math.round(ny);
-      onMoveCharRef.current(d.charId, d.lastX, d.lastY);
+      const nx = Math.max(24, Math.min(d.rectW-24, d.origX + dx));
+      const ny = Math.max(24, Math.min(d.rectH-24, d.origY + dy));
+      onMoveChar(d.charId, Math.round(nx), Math.round(ny));
     };
-    const end = () => {
-      const d = dragRef.current;
-      // lastX/lastY（move で記録した最終座標）を Firestore に保存
-      if(d && onMoveCharEndRef.current && d.lastX != null){
-        onMoveCharEndRef.current(d.charId, d.lastX, d.lastY);
-      }
-      dragRef.current=null; setDragging(null);
-    };
+    const end = () => { dragRef.current=null; setDragging(null); };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", end);
     window.addEventListener("touchmove", move, {passive:false});
@@ -3082,7 +2848,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", end);
     };
-  },[dragging]);
+  },[dragging, onMoveChar]);
 
   // 編集キャンバス上でのグループの背景枠（メンバーの現在位置を囲む矩形）を計算
   const groupBoxes = useMemo(()=>groups.map(g=>{
@@ -3095,12 +2861,6 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     const height = Math.max(...ys)-Math.min(...ys)+margin*2;
     return { ...g, x, y, width, height };
   }).filter(Boolean), [groups, byId]);
-
-  // 管理エディタの関係線ラベルを layoutGraphLabels で衝突回避して配置する。
-  // ノード座標はピクセル直値なので px/py は恒等関数。
-  const { edgeRender: editorEdgeRender } = useMemo(()=>
-    layoutGraphLabels({ characters, relations, px: x=>x??100, py: y=>y??100, nodeRadius: NODE_R }),
-  [characters, relations]);
 
   if(characters.length<2){
     return(
@@ -3123,21 +2883,22 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
               <g key={g.id}>
                 <rect x={g.x} y={g.y} width={g.width} height={g.height} rx="16"
                   fill={g.color||"#c8a86a"} fillOpacity="0.08" stroke={g.color||"#c8a86a"} strokeOpacity="0.5" strokeDasharray="3 4"/>
-                {g.name&&<text x={g.x+14} y={g.y-6} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)">{g.name}</text>}
+                {g.name&&<text x={g.x+14} y={g.y+20} fontSize="11" fill={g.color||"#c8a86a"} fontFamily="var(--body)">{g.name}</text>}
               </g>
             ))}
-            {editorEdgeRender.filter(r=>r.show).map(r=>{
-              const geo=arrowGeometry(r.x1,r.y1,r.x2,r.y2,r.arrowType||"none",NODE_R,8);
+            {relations.map(r=>{
+              const a=byId[r.fromId], b=byId[r.toId];
+              if(!a||!b) return null;
+              const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
+              const mx=(x1+x2)/2, my=(y1+y2)/2;
+              const geo=arrowGeometry(x1,y1,x2,y2,r.arrowType||"none",NODE_R,8);
               return(
                 <g key={r.id}>
                   <line x1={geo.lx1} y1={geo.ly1} x2={geo.lx2} y2={geo.ly2} stroke={r.color||"#c8a86a"} strokeWidth="1.5" opacity="0.6"/>
                   {geo.endArrowPoints&&<polygon points={geo.endArrowPoints} fill={r.color||"#c8a86a"} opacity="0.85"/>}
                   {geo.startArrowPoints&&<polygon points={geo.startArrowPoints} fill={r.color||"#c8a86a"} opacity="0.85"/>}
-                  {r.hasLabel&&(
-                    <>
-                      <rect x={r.labelCx-r.labelW/2} y={r.labelCy-r.labelH/2} width={r.labelW} height={r.labelH} fill="var(--bg)" opacity="0.88"/>
-                      <text x={r.labelCx} y={r.labelCy+4} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{r.label}</text>
-                    </>
+                  {r.label&&(
+                    <text x={mx} y={my-6} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{r.label}</text>
                   )}
                 </g>
               );
@@ -3226,9 +2987,8 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
 // ═══════════════ ADMIN ═══════════════
 function AdminPanel({store,onClose}){
   const {site,setSite,author,setAuthor,novels,messages,deleteMessage,markRead,
-    saveError,clearSaveError,
     addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,
-    addCharacter,updateCharacter,updateCharacterLocal,deleteCharacter,
+    addCharacter,updateCharacter,deleteCharacter,
     addCharRelation,updateCharRelation,deleteCharRelation,
     addCharGroup,updateCharGroup,deleteCharGroup,toggleCharGroupMember,
     addMurmur,deleteMurmur,updateMurmur,
@@ -3250,21 +3010,8 @@ function AdminPanel({store,onClose}){
   const [cropSrc,setCropSrc]=useState(null); // 著者アイコン編集中の元画像(data URI)
 
   const [saving,setSaving]=useState(false);
-  // 「保存する」ボタンは、BufferedInput/BufferedTextarea が自動保存（フォーカスを
-  // 外した時 or 入力停止0.7秒後にFirestoreへ書き込む）される設計のため、
-  // 以前はボタン自体は何もせず「保存しました」と表示するだけだった。
-  // そのため、ボタンを押した直後にまだ入力欄にフォーカスが残っている
-  // （commitNowが発火していない）状態でページを離れると、最後に入力した
-  // 内容がFirestoreに書き込まれないまま失われることがあった。
-  // ボタン押下時に明示的にフォーカスを外し、ブラウザの再描画を1フレーム
-  // 待ってから完了表示を出すことで、保留中の変更を確実にコミットさせる。
   const flash=async (fn) => {
     setSaving(true);
-    if(document.activeElement && typeof document.activeElement.blur==="function"){
-      document.activeElement.blur();
-    }
-    // blur によって発火する onCommit（Firestore書き込み）が開始されるのを待つ
-    await new Promise(r=>setTimeout(r,50));
     try { if(fn) await fn(); } catch(e){ console.error(e); }
     setSaved(true); setSaving(false);
     setTimeout(()=>setSaved(false),2000);
@@ -3303,13 +3050,6 @@ function AdminPanel({store,onClose}){
 
   return(
     <div className={`admin-overlay fadein${menuSelected?" menu-selected":""}`}>
-      {saveError&&(
-        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,background:"#7a1f1f",color:"#fff",
-          padding:"10px 16px",fontSize:13,display:"flex",alignItems:"center",gap:12,lineHeight:1.6}}>
-          <span style={{flex:1}}>⚠️ 保存できませんでした：{saveError}</span>
-          <button onClick={clearSaveError} style={{background:"transparent",border:"1px solid rgba(255,255,255,.5)",color:"#fff",padding:"4px 10px",borderRadius:3,cursor:"pointer",fontSize:12}}>閉じる</button>
-        </div>
-      )}
       <div className="admin-sidebar">
         <div className="admin-logo" onClick={onClose} style={{cursor:"pointer"}} title="閲覧ページに戻る"><div className="admin-logo-txt">管理パネル</div><div className="admin-logo-sub" style={{letterSpacing:".2em"}}>← tap to exit</div></div>
         <nav className="admin-nav">
@@ -3722,8 +3462,7 @@ function AdminPanel({store,onClose}){
                 novel={eNov}
                 selectedCharId={selectedCharId}
                 onSelectChar={setSelectedCharId}
-                onMoveChar={(chid,x,y)=>updateCharacterLocal(eNov.id,chid,{x,y})}
-                onMoveCharEnd={(chid,x,y)=>updateCharacter(eNov.id,chid,{x,y})}
+                onMoveChar={(chid,x,y)=>updateCharacter(eNov.id,chid,{x,y})}
                 onAddRelation={()=>addCharRelation(eNov.id)}
                 onUpdateRelation={(rid,patch)=>updateCharRelation(eNov.id,rid,patch)}
                 onDeleteRelation={rid=>deleteCharRelation(eNov.id,rid)}
