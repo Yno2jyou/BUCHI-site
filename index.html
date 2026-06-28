@@ -212,6 +212,7 @@ function useStore() {
   const [author,  setAuthorLocal] = useState(DEFAULT_AUTHOR);
   const [novels,  _setNovelsLocal] = useState([]);
   const novelsRef = useRef([]); // novels の最新値を常に参照できるRef（クロージャ問題対策）
+  const savingRef = useRef(false); // Firestore書き込み中フラグ（onSnapshotの誤発火を防ぐ）
   // setNovelsLocalを呼ぶたびに必ずnovelsRef.currentも同期させるラッパー
   const setNovelsLocal = (updater) => {
     _setNovelsLocal(prev => {
@@ -241,9 +242,12 @@ function useStore() {
     }, e => { setDbError(e.message); check(); }));
 
     unsubs.push(db.collection("novels").orderBy("createdAt","asc").onSnapshot(snap => {
+      // savingRef.current が true の間は自分の書き込みによる発火なので無視する
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setNovelsLocal(data);
-      novelsRef.current = data;
+      if(!savingRef.current){
+        novelsRef.current = data;
+        setNovelsLocal(data);
+      }
       check();
     }, e => { setDbError(e.message); check(); }));
 
@@ -303,12 +307,16 @@ function useStore() {
   const updateNovel = async (id, patch) => {
     novelsRef.current = novelsRef.current.map(n => n.id===id ? {...n,...patch} : n);
     setNovelsLocal(novelsRef.current);
+    savingRef.current=true;
     try { await db.collection("novels").doc(id).update(patch); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const deleteNovel = async id => {
     novelsRef.current = novelsRef.current.filter(n => n.id!==id);
     setNovelsLocal(novelsRef.current);
+    savingRef.current=true;
     try { await db.collection("novels").doc(id).delete(); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
 
   const addChapter = async nid => {
@@ -319,7 +327,9 @@ function useStore() {
     );
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
     return cid;
   };
 
@@ -335,7 +345,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
     return chid;
   };
   // ドラッグ中は updateCharacterLocal（ローカルstateのみ）で毎フレーム更新し、
@@ -351,7 +363,9 @@ function useStore() {
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
     const characters = novel?.characters||[];
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ characters }); } catch(e) { console.error("updateCharacter failed:", e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const updateCharacterLocal = (nid, chid, patch) => {
     // ドラッグ中: novelsRef.current を即時更新してローカル表示だけ更新（Firestore書き込みなし）
@@ -372,7 +386,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ characters: novel?.characters||[], charRelations: novel?.charRelations||[], charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
 
   // ───────── 所属先（グループ）のCRUD ─────────
@@ -387,7 +403,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
     return gid;
   };
   const updateCharGroup = async (nid, gid, patch) => {
@@ -397,7 +415,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const toggleCharGroupMember = async (nid, gid, chid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -411,7 +431,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const deleteCharGroup = async (nid, gid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -420,7 +442,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charGroups: novel?.charGroups||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
 
   // ───────── キャラクター相関図（関係線）のCRUD ─────────
@@ -436,7 +460,9 @@ function useStore() {
     const novel = novelsRef.current.find(n => n.id===nid);
     if(!novel || (novel.characters||[]).length < 2) return null;
     setNovelsLocal(novelsRef.current);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
     return rid;
   };
   const updateCharRelation = async (nid, rid, patch) => {
@@ -446,7 +472,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const deleteCharRelation = async (nid, rid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -455,7 +483,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ charRelations: novel?.charRelations||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const updateChapter = async (nid, cid, patch) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -464,7 +494,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
   const deleteChapter = async (nid, cid) => {
     novelsRef.current = novelsRef.current.map(n => {
@@ -473,7 +505,9 @@ function useStore() {
     });
     setNovelsLocal(novelsRef.current);
     const novel = novelsRef.current.find(n => n.id===nid);
+    savingRef.current=true;
     try { await db.collection("novels").doc(nid).update({ chapters: novel?.chapters||[] }); } catch(e) { console.error(e); }
+    setTimeout(()=>{ savingRef.current=false; }, 800);
   };
 
   const addMessage = async m => {
@@ -2946,23 +2980,18 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       const clientX = e.touches?e.touches[0].clientX:e.clientX;
       const clientY = e.touches?e.touches[0].clientY:e.clientY;
       const dx = clientX - d.startX, dy = clientY - d.startY;
-      // クランプ上限はキャンバスサイズ（ビューポートではない）
       const nx = Math.max(24, Math.min(d.canvasW-24, d.origX + dx));
       const ny = Math.max(24, Math.min(d.canvasH-24, d.origY + dy));
-      onMoveChar(d.charId, Math.round(nx), Math.round(ny));
+      // 最終座標を dragRef に記録しながらローカル表示を更新
+      d.lastX = Math.round(nx);
+      d.lastY = Math.round(ny);
+      onMoveChar(d.charId, d.lastX, d.lastY);
     };
-    const end = (e) => {
+    const end = () => {
       const d = dragRef.current;
-      if(d && onMoveCharEnd){
-        // ドラッグ終了時の最終座標でFirestoreに保存
-        const clientX = e?.changedTouches?e.changedTouches[0].clientX:(e?.clientX??null);
-        const clientY = e?.changedTouches?e.changedTouches[0].clientY:(e?.clientY??null);
-        if(clientX !== null){
-          const dx = clientX - d.startX, dy = clientY - d.startY;
-          const nx = Math.max(24, Math.min(d.canvasW-24, d.origX + dx));
-          const ny = Math.max(24, Math.min(d.canvasH-24, d.origY + dy));
-          onMoveCharEnd(d.charId, Math.round(nx), Math.round(ny));
-        }
+      // lastX/lastY（move で記録した最終座標）を Firestore に保存
+      if(d && onMoveCharEnd && d.lastX != null){
+        onMoveCharEnd(d.charId, d.lastX, d.lastY);
       }
       dragRef.current=null; setDragging(null);
     };
