@@ -1303,7 +1303,7 @@ function Styles({site, lightMode}){
       .admin-sidebar{width:100%;max-height:none;height:100%}
       .admin-main{display:none;padding:20px 16px 120px}
       .admin-overlay.menu-selected .admin-sidebar{display:none}
-      .admin-overlay.menu-selected .admin-main{display:block}
+      .admin-overlay.menu-selected .admin-main{display:block;height:100vh;overflow-y:auto}
       .save-bar{left:0}
       .form-row{grid-template-columns:1fr}
       .mobile-back-btn{display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--accent);font-family:var(--body);font-size:13px;letter-spacing:.08em;padding:0 0 20px;cursor:pointer}
@@ -3046,10 +3046,14 @@ function AdminPanel({store,onClose}){
 
   const scrollAdminTop = () => {
     const doScroll = () => {
+      // デスクトップ：admin-main が独立スクロールコンテナ
       if(adminMainRef.current) {
         adminMainRef.current.scrollTop = 0;
-        adminMainRef.current.scrollTo({ top: 0, behavior: 'instant' });
       }
+      // モバイル：display:block 時はウィンドウ全体がスクロール
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     };
     requestAnimationFrame(() => requestAnimationFrame(doScroll));
   };
