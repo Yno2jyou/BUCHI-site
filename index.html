@@ -321,11 +321,21 @@ function useStore() {
     try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
     return chid;
   };
+  // ドラッグ中は updateCharacterLocal（ローカルstateのみ）で毎フレーム更新し、
+  // ドラッグ終了時に updateCharacter（Firestore書き込み）を一度だけ呼ぶ。
+  // これにより onSnapshot との競合を防ぎ、座標が保存されるようにする。
   const updateCharacter = async (nid, chid, patch) => {
     const novel = novels.find(n => n.id===nid);
     const updated = (novel?.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated} : n));
     try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
+  };
+  const updateCharacterLocal = (nid, chid, patch) => {
+    setNovelsLocal(a => a.map(n => {
+      if(n.id !== nid) return n;
+      const updated = (n.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
+      return {...n, characters: updated};
+    }));
   };
   const deleteCharacter = async (nid, chid) => {
     const novel = novels.find(n => n.id===nid);
@@ -488,7 +498,7 @@ function useStore() {
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
     addMessage, deleteMessage, markRead,
     addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
-    addCharacter, updateCharacter, deleteCharacter,
+    addCharacter, updateCharacter, updateCharacterLocal, deleteCharacter,
     addCharRelation, updateCharRelation, deleteCharRelation,
     addCharGroup, updateCharGroup, deleteCharGroup, toggleCharGroupMember,
     addMurmur, deleteMurmur, updateMurmur,
@@ -2836,7 +2846,7 @@ function CharacterAdminList({novel, onAdd, onUpdate, onDelete}){
 // ═══════════════ キャラクター相関図エディタ（作品編集タブ） ═══════════════
 // 著者がキャラクターをドラッグして自由に配置し、人物間に関係線（ラベル付き）を引ける本格エディタ。
 // 座標はキャラクターの x,y フィールドにそのまま保存され、読者側 CharacterGraph はこの座標を読み取って描画する。
-function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, onAddRelation, onUpdateRelation, onDeleteRelation, onAddGroup, onUpdateGroup, onDeleteGroup, onToggleGroupMember}){
+function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, onMoveCharEnd, onAddRelation, onUpdateRelation, onDeleteRelation, onAddGroup, onUpdateGroup, onDeleteGroup, onToggleGroupMember}){
   const characters = novel.characters||[];
   const relations = novel.charRelations||[];
   const groups = novel.charGroups||[];
@@ -2861,7 +2871,12 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     if(!rect||!c) return;
     const clientX = e.touches?e.touches[0].clientX:e.clientX;
     const clientY = e.touches?e.touches[0].clientY:e.clientY;
-    dragRef.current = { charId, startX:clientX, startY:clientY, origX:c.x??100, origY:c.y??100, rectW:rect.width, rectH:rect.height };
+    // scrollLeft/Top を加算してスクロール量を考慮する
+    const scrollEl = stageRef.current?.parentElement;
+    const scrollLeft = scrollEl?.scrollLeft||0;
+    const scrollTop  = scrollEl?.scrollTop||0;
+    dragRef.current = { charId, startX:clientX, startY:clientY, origX:c.x??100, origY:c.y??100,
+      canvasW, canvasH, scrollLeft, scrollTop };
     setDragging(charId);
     onSelectChar(charId);
   };
@@ -2875,11 +2890,26 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       const clientX = e.touches?e.touches[0].clientX:e.clientX;
       const clientY = e.touches?e.touches[0].clientY:e.clientY;
       const dx = clientX - d.startX, dy = clientY - d.startY;
-      const nx = Math.max(24, Math.min(d.rectW-24, d.origX + dx));
-      const ny = Math.max(24, Math.min(d.rectH-24, d.origY + dy));
+      // クランプ上限はキャンバスサイズ（ビューポートではない）
+      const nx = Math.max(24, Math.min(d.canvasW-24, d.origX + dx));
+      const ny = Math.max(24, Math.min(d.canvasH-24, d.origY + dy));
       onMoveChar(d.charId, Math.round(nx), Math.round(ny));
     };
-    const end = () => { dragRef.current=null; setDragging(null); };
+    const end = (e) => {
+      const d = dragRef.current;
+      if(d && onMoveCharEnd){
+        // ドラッグ終了時の最終座標でFirestoreに保存
+        const clientX = e?.changedTouches?e.changedTouches[0].clientX:(e?.clientX??null);
+        const clientY = e?.changedTouches?e.changedTouches[0].clientY:(e?.clientY??null);
+        if(clientX !== null){
+          const dx = clientX - d.startX, dy = clientY - d.startY;
+          const nx = Math.max(24, Math.min(d.canvasW-24, d.origX + dx));
+          const ny = Math.max(24, Math.min(d.canvasH-24, d.origY + dy));
+          onMoveCharEnd(d.charId, Math.round(nx), Math.round(ny));
+        }
+      }
+      dragRef.current=null; setDragging(null);
+    };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", end);
     window.addEventListener("touchmove", move, {passive:false});
@@ -2890,7 +2920,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", end);
     };
-  },[dragging, onMoveChar]);
+  },[dragging, onMoveChar, onMoveCharEnd]);
 
   // 編集キャンバス上でのグループの背景枠（メンバーの現在位置を囲む矩形）を計算
   const groupBoxes = useMemo(()=>groups.map(g=>{
@@ -3035,7 +3065,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
 function AdminPanel({store,onClose}){
   const {site,setSite,author,setAuthor,novels,messages,deleteMessage,markRead,
     addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,
-    addCharacter,updateCharacter,deleteCharacter,
+    addCharacter,updateCharacter,updateCharacterLocal,deleteCharacter,
     addCharRelation,updateCharRelation,deleteCharRelation,
     addCharGroup,updateCharGroup,deleteCharGroup,toggleCharGroupMember,
     addMurmur,deleteMurmur,updateMurmur,
@@ -3509,7 +3539,8 @@ function AdminPanel({store,onClose}){
                 novel={eNov}
                 selectedCharId={selectedCharId}
                 onSelectChar={setSelectedCharId}
-                onMoveChar={(chid,x,y)=>updateCharacter(eNov.id,chid,{x,y})}
+                onMoveChar={(chid,x,y)=>updateCharacterLocal(eNov.id,chid,{x,y})}
+                onMoveCharEnd={(chid,x,y)=>updateCharacter(eNov.id,chid,{x,y})}
                 onAddRelation={()=>addCharRelation(eNov.id)}
                 onUpdateRelation={(rid,patch)=>updateCharRelation(eNov.id,rid,patch)}
                 onDeleteRelation={rid=>deleteCharRelation(eNov.id,rid)}
