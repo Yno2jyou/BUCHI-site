@@ -2285,25 +2285,31 @@ function EncounterPage({onExit, stories}){
   },[pickNext]);
 
   // uidが取得できたら（多くは即時〜数百ms後）、Firestoreの進捗を読み込んで反映する。
-  // すでに画面には最初の男が表示済みなので、ここでは進捗(viewedNums)だけを追いつかせる。
+  // すでに画面には最初の男が表示済みなので、ここでは進捗(viewedNums/metEndingMan)だけを追いつかせる。
   useEffect(()=>{
     if(!uid) return;
     let mounted = true;
     db.collection("encounterProgress").doc(uid).get().then(snap=>{
       if(!mounted) return;
-      if(snap.exists && Array.isArray(snap.data().viewedNums)){
-        setViewedNums(snap.data().viewedNums);
+      if(snap.exists){
+        const data = snap.data();
+        if(Array.isArray(data.viewedNums)) setViewedNums(data.viewedNums);
+        if(data.metEndingMan === true) setMetEndingMan(true);
       }
     }).catch(e=>console.error(e));
     return ()=>{ mounted=false; };
   },[uid]);
 
-  const saveProgress = useCallback((nums)=>{
+  const saveProgress = useCallback((nums, endingMan)=>{
     if(!uid) return; // 認証が済んでいない/失敗していても、表示自体は継続できる。保存だけスキップされる。
-    db.collection("encounterProgress").doc(uid).set({
+    // endingMan が undefined の場合は現在の metEndingMan を参照しない（staleになる恐れがある）ため、
+    // 呼び出し側から明示的に渡す設計にする。
+    const payload = {
       viewedNums: nums,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }).catch(e=>console.error(e));
+    };
+    if(endingMan !== undefined) payload.metEndingMan = endingMan;
+    db.collection("encounterProgress").doc(uid).set(payload, { merge: true }).catch(e=>console.error(e));
   },[uid]);
 
   const handleShowStory = () => {
@@ -2316,11 +2322,12 @@ function EncounterPage({onExit, stories}){
       if(current.num < 99 && !viewedNums.includes(current.num)){
         const next = [...new Set([...viewedNums, current.num])];
         setViewedNums(next);
-        saveProgress(next);
+        saveProgress(next, false);
         setLastNewNum(current.num); // 今回新しく出会った男としてマーク（図鑑を閉じるまでNEW表示）
       }
       if(current.num === 99){
         setMetEndingMan(true); // 99人目（終わりの男）に到達 → 進捗表示を99/99にするためのフラグ
+        saveProgress(viewedNumsRef.current, true); // 99人目到達をFirestoreに永続化
       }
     },600);
   };
@@ -2407,7 +2414,7 @@ function EncounterPage({onExit, stories}){
     setFadeOut(false); // ブラックアウト演出中にtrueになったままだったのを戻す（街だけ見えて男が表示されない不具合の修正）
     setViewedNums([]);
     setMetEndingMan(false);
-    saveProgress([]);
+    saveProgress([], false);
     setLastNewNum(null);
     setCurrent(pickNext([]));
     setCityHidden(false);
