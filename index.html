@@ -2,8 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
-<meta name="theme-color" content="#07070f"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>淵</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -709,11 +708,6 @@ function arrowGeometry(x1,y1,x2,y2,arrowType,nodeRadius=24,arrowSize=9){
 function Styles({site, lightMode}){
   const accent=site.theme?.accent||"#c8a86a";
   const bg=lightMode?"#f5f0e8":(site.theme?.bg||"#07070f");
-  React.useEffect(()=>{
-    let el=document.querySelector('meta[name="theme-color"]');
-    if(!el){el=document.createElement('meta');el.name='theme-color';document.head.appendChild(el);}
-    el.content=bg;
-  },[bg]);
   const font=site.theme?.font==="gothic"?"'Noto Sans JP',sans-serif":"'Cormorant Garamond','Noto Serif JP',serif";
   const txt   = lightMode?"#1a1814":"#e2ddd4";
   const txt2  = lightMode?"#5c5650":"#8c8578";
@@ -723,13 +717,13 @@ function Styles({site, lightMode}){
   const navBg = lightMode?"rgba(245,240,232,.92)":"rgba(7,7,15,.9)";
   const mix=lightMode?"aaa":"888";
   return React.createElement('style',null,`
-    :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg};--nav-h:calc(60px + env(safe-area-inset-top))}
+    :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg};--nav-h:60px}
     html{scroll-behavior:smooth}body{background:var(--bg);overflow-x:hidden}
     .app{min-height:100vh;background:var(--bg);color:var(--txt);font-family:var(--body)}
     .nav{position:relative;z-index:10}.hero{position:relative;z-index:10}.section{position:relative;z-index:10}.detail-body{position:relative;z-index:10}.reading-wrap{position:relative;z-index:10}
     .app::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
     /* NAV */
-    .nav{position:fixed;top:0;left:0;right:0;z-index:500;height:calc(60px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 40px 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--nav-bg);backdrop-filter:blur(20px)}
+    .nav{position:fixed;top:0;left:0;right:0;z-index:500;height:60px;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--nav-bg);backdrop-filter:blur(20px)}
     .nav-logo{cursor:pointer}.nav-logo-main{font-family:var(--serif);font-size:20px;font-weight:300;color:var(--accent);letter-spacing:.12em}.nav-logo-sub{font-size:8px;letter-spacing:.4em;color:var(--txt3);text-transform:uppercase;margin-top:1px}
     .nav-center{display:flex;gap:4px}
     .nav-btn{background:none;border:none;cursor:pointer;font-family:var(--body);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--txt3);padding:6px 12px;border-radius:2px;transition:color .25s,background .25s}
@@ -1207,8 +1201,7 @@ function Styles({site, lightMode}){
     @keyframes ptInkOut{0%{opacity:1}100%{opacity:0}}
     @keyframes ptSlideIn{0%{transform:translateX(-6%)}100%{transform:translateX(0)}}
     @keyframes driftUp{0%{transform:translateY(110vh)}100%{transform:translateY(-120px)}}
-    .bg-text-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0;clip-path:inset(var(--nav-h) 0 0 0)}
-    @media(max-width:768px){.bg-text-layer{display:none}}
+    .bg-text-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
     .bg-text-col{position:absolute;top:0;display:flex;flex-direction:column;gap:2.2em;writing-mode:vertical-rl;text-orientation:mixed;font-family:var(--serif);white-space:nowrap;will-change:transform}
     .rise{animation:rise .6s ease forwards;opacity:0}.d1{animation-delay:.04s}.d2{animation-delay:.14s}.d3{animation-delay:.26s}.d4{animation-delay:.38s}
     @keyframes fadein{from{opacity:0}to{opacity:1}}.fadein{animation:fadein .3s ease forwards}
