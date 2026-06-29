@@ -714,7 +714,7 @@ function Styles({site, lightMode}){
   const txt3  = lightMode?"#9c9890":"#4a4840";
   const border= lightMode?"rgba(0,0,0,.1)":"rgba(255,255,255,.06)";
   const borderHi=lightMode?"rgba(0,0,0,.18)":"rgba(255,255,255,.14)";
-  const navBg = lightMode?"rgba(245,240,232,.92)":"rgba(7,7,15,.9)";
+  const navBg = lightMode?"rgba(245,240,232,1)":"rgba(7,7,15,1)";
   const mix=lightMode?"aaa":"888";
   return React.createElement('style',null,`
     :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg};--nav-h:60px}
@@ -723,7 +723,8 @@ function Styles({site, lightMode}){
     .nav{position:relative;z-index:10}.hero{position:relative;z-index:10}.section{position:relative;z-index:10}.detail-body{position:relative;z-index:10}.reading-wrap{position:relative;z-index:10}
     .app::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
     /* NAV */
-    .nav{position:fixed;top:0;left:0;right:0;z-index:500;height:60px;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--nav-bg);backdrop-filter:blur(20px)}
+    .nav{position:fixed;top:0;left:0;right:0;z-index:500;height:60px;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--nav-bg)}
+    .nav::before{content:'';position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:501;pointer-events:none}
     .nav-logo{cursor:pointer}.nav-logo-main{font-family:var(--serif);font-size:20px;font-weight:300;color:var(--accent);letter-spacing:.12em}.nav-logo-sub{font-size:8px;letter-spacing:.4em;color:var(--txt3);text-transform:uppercase;margin-top:1px}
     .nav-center{display:flex;gap:4px}
     .nav-btn{background:none;border:none;cursor:pointer;font-family:var(--body);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--txt3);padding:6px 12px;border-radius:2px;transition:color .25s,background .25s}
@@ -789,7 +790,7 @@ function Styles({site, lightMode}){
     .toc-text{font-size:14px;color:var(--txt);transition:color .2s;letter-spacing:.04em}
     .toc-arrow{margin-left:auto;font-size:15px;color:var(--txt3);transition:transform .2s,color .2s}.toc-item:hover .toc-arrow{transform:translateX(5px);color:var(--accent)}
     /* READING */
-    .reading-nav{position:fixed;top:0;left:0;right:0;z-index:500;height:54px;padding:0 36px;display:flex;align-items:center;gap:14px;background:var(--nav-bg);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+    .reading-nav{position:fixed;top:0;left:0;right:0;z-index:500;height:54px;padding:0 36px;display:flex;align-items:center;gap:14px;background:var(--nav-bg);border-bottom:1px solid var(--border)}
     .reading-back{background:none;border:none;cursor:pointer;color:var(--txt3);font-size:15px;padding:4px;transition:color .2s}.reading-back:hover{color:var(--accent)}
     .reading-crumb{font-size:11px;color:var(--txt3);letter-spacing:.1em}.reading-crumb b{color:var(--txt2);font-weight:400}
     .reading-nav-right{margin-left:auto;display:flex;align-items:center;gap:8px}
