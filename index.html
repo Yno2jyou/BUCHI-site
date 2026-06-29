@@ -2352,16 +2352,19 @@ function FlowchartView({data, novelById, onOpenNovel}){
           {nodes.map(n=>{
             const isResult=n.kind==="result";
             const isCurrent=n.id===currentId;
+            const isRevealed=isResult && isCurrent; // おすすめ確定時だけ開示
             const novel = isResult ? novelById[n.novelId] : null;
             return (
               <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor:"default"}}>
                 {isResult
-                  ? <circle cx={n.x} cy={n.y} r="46" className={`wmap-flow-node-result ${isCurrent?"current":""}`} style={{fill:"var(--surface)",fillOpacity:1}}/>
+                  ? <circle cx={n.x} cy={n.y} r="46"
+                      className={`wmap-flow-node-result ${isCurrent?"current":""}`}
+                      style={isRevealed ? {} : {fill:"var(--surface)",fillOpacity:1}}/>
                   : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
                 }
-                {!isResult && (
+                {(!isResult || isRevealed) && (
                   <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
-                    {n.text||"質問"}
+                    {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
                   </text>
                 )}
               </g>
