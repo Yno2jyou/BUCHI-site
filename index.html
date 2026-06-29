@@ -719,12 +719,11 @@ function Styles({site, lightMode}){
   return React.createElement('style',null,`
     :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg};--nav-h:60px}
     html{scroll-behavior:smooth}body{background:var(--bg);overflow-x:hidden}
-    .app{min-height:100vh;background:var(--bg);color:var(--txt);font-family:var(--body);position:relative;isolation:isolate}
+    .app{min-height:100vh;background:var(--bg);color:var(--txt);font-family:var(--body);position:relative;z-index:1}
     .nav{position:relative;z-index:10}.hero{position:relative;z-index:10}.section{position:relative;z-index:10}.detail-body{position:relative;z-index:10}.reading-wrap{position:relative;z-index:10}
     .app::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
     /* NAV */
-    .nav{position:fixed;top:0;left:0;right:0;z-index:500;height:60px;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--nav-bg)}
-    .nav::before{content:'';position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:501;pointer-events:none}
+    .nav{position:fixed;top:0;left:0;right:0;z-index:500;min-height:60px;padding:env(safe-area-inset-top,0px) 40px 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--nav-bg)}
     .nav-logo{cursor:pointer}.nav-logo-main{font-family:var(--serif);font-size:20px;font-weight:300;color:var(--accent);letter-spacing:.12em}.nav-logo-sub{font-size:8px;letter-spacing:.4em;color:var(--txt3);text-transform:uppercase;margin-top:1px}
     .nav-center{display:flex;gap:4px}
     .nav-btn{background:none;border:none;cursor:pointer;font-family:var(--body);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--txt3);padding:6px 12px;border-radius:2px;transition:color .25s,background .25s}
@@ -3710,7 +3709,7 @@ function BgTextLayer({novels}){
   },[novels.map(n=>n.id).join(",")]);
 
   if(cols.length===0) return null;
-  return(
+  return ReactDOM.createPortal(
     <div className="bg-text-layer" aria-hidden="true">
       {cols.map(col=>(
         <div key={col.key}
@@ -3732,7 +3731,8 @@ function BgTextLayer({novels}){
           {col.text}
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 
