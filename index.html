@@ -1201,7 +1201,7 @@ function Styles({site, lightMode}){
     @keyframes ptInkOut{0%{opacity:1}100%{opacity:0}}
     @keyframes ptSlideIn{0%{transform:translateX(-6%)}100%{transform:translateX(0)}}
     @keyframes driftUp{0%{transform:translateY(110vh)}100%{transform:translateY(-120px)}}
-    .bg-text-layer{position:fixed;inset:0;top:var(--nav-h);pointer-events:none;overflow:hidden;z-index:0}
+    .bg-text-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0;clip-path:inset(var(--nav-h) 0 0 0)}
     .bg-text-col{position:absolute;top:0;display:flex;flex-direction:column;gap:2.2em;writing-mode:vertical-rl;text-orientation:mixed;font-family:var(--serif);white-space:nowrap;will-change:transform}
     .rise{animation:rise .6s ease forwards;opacity:0}.d1{animation-delay:.04s}.d2{animation-delay:.14s}.d3{animation-delay:.26s}.d4{animation-delay:.38s}
     @keyframes fadein{from{opacity:0}to{opacity:1}}.fadein{animation:fadein .3s ease forwards}
