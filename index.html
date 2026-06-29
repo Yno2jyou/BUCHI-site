@@ -52,6 +52,42 @@ const DEFAULT_AUTHOR = {
   influences:"カフカ, ドストエフスキー, 安部公房, カミュ", since:"2020",
   icon:"", links:[], murmurs:[],
 };
+
+// ═══════════════ 作品マップ：デフォルトデータ ═══════════════
+// サイト初回表示時・Firestoreにまだ保存がない場合に使われる雛形。
+// 管理パネルの「作品マップ」タブから、軸名・質問文・各作品の位置や数値を
+// 自由に書き換えられる。
+const DEFAULT_WORKS_MAP = {
+  // ── 四象限マトリクス ──
+  quadrant: {
+    title:"四象限マップ",
+    desc:"作品を2つの軸の上に配置し、全体の傾向を一望できます。",
+    xLabel:"軽い ←→ 重い", xLeftLabel:"軽い", xRightLabel:"重い",
+    yLabel:"静 ←→ 動", yTopLabel:"動", yBottomLabel:"静",
+    points:[], // [{novelId, x, y}] x,y は 0-100（中心が50）
+  },
+  // ── レーダーチャート ──
+  radar:{
+    title:"特徴レーダー",
+    desc:"いくつかのテーマ軸から、各作品の特徴を多角形で表します。",
+    axes:[
+      {id:"a1", label:"心理描写"},
+      {id:"a2", label:"思弁性"},
+      {id:"a3", label:"物語性"},
+      {id:"a4", label:"幻想性"},
+      {id:"a5", label:"余韻"},
+    ],
+    novelIds:[], // 表示する作品（最大5件程度を推奨）
+    values:{}, // { [novelId]: { [axisId]: 0-100 } }
+  },
+  // ── フローチャート（質問形式） ──
+  flowchart:{
+    title:"あなたに合う一篇は？",
+    desc:"質問に答えながら進むと、今の気分に合った作品に辿り着きます。",
+    nodes:[], // [{id, kind:'question'|'result', text, x, y, novelId?}]
+    edges:[], // [{id, fromId, toId, label}]
+  },
+};
 const DEFAULT_NOVELS = [
   { id:"n1", title:"深夜の鏡", subtitle:"闇の中の自己探求", author:"蒼井 玲", genre:"心理・文学",
     tags:["心理","アイデンティティ","孤独"],
@@ -213,13 +249,14 @@ function useStore() {
   const [novels,  setNovelsLocal] = useState([]);
   const [messages,setMsgLocal]    = useState([]);
   const [motokoStories, setMotokoStoriesLocal] = useState(MOTOKO_STORIES);
+  const [worksMap, setWorksMapLocal] = useState(DEFAULT_WORKS_MAP);
   const [loading, setLoading]     = useState(true);
   const [dbError, setDbError]     = useState(null);
 
   useEffect(() => {
     const unsubs = [];
     let resolved = 0;
-    const check = () => { resolved++; if(resolved >= 5) setLoading(false); };
+    const check = () => { resolved++; if(resolved >= 6) setLoading(false); };
 
     unsubs.push(db.collection("settings").doc("site").onSnapshot(snap => {
       if (snap.exists) setSiteLocal(snap.data()); else setSiteLocal(DEFAULT_SITE);
@@ -248,6 +285,24 @@ function useStore() {
         setMotokoStoriesLocal(snap.data().items);
       } else {
         setMotokoStoriesLocal(MOTOKO_STORIES);
+      }
+      check();
+    }, e => { setDbError(e.message); check(); }));
+
+    // 「作品マップ」(四象限・レーダー・フローチャート) の設定データ。
+    // Firestoreに保存がなければデフォルト雛形(DEFAULT_WORKS_MAP)を使う。
+    // 保存されているデータはデフォルトと深いマージをして、後から追加された
+    // フィールド（例：新しいレーダー軸の初期値）が欠けないようにする。
+    unsubs.push(db.collection("settings").doc("worksMap").onSnapshot(snap => {
+      if (snap.exists) {
+        const d = snap.data() || {};
+        setWorksMapLocal({
+          quadrant: { ...DEFAULT_WORKS_MAP.quadrant, ...(d.quadrant||{}) },
+          radar: { ...DEFAULT_WORKS_MAP.radar, ...(d.radar||{}) },
+          flowchart: { ...DEFAULT_WORKS_MAP.flowchart, ...(d.flowchart||{}) },
+        });
+      } else {
+        setWorksMapLocal(DEFAULT_WORKS_MAP);
       }
       check();
     }, e => { setDbError(e.message); check(); }));
@@ -485,6 +540,118 @@ function useStore() {
     await saveMotokoStories(next);
   }, [motokoStories, saveMotokoStories]);
 
+  // ───────── 作品マップ（四象限・レーダー・フローチャート）のCRUD ─────────
+  // 3つのセクションはそれぞれ独立して保存できるよう、セクション名を指定して
+  // 部分的に更新する汎用関数を用意する。
+  const saveWorksMapSection = useCallback(async (section, value) => {
+    setWorksMapLocal(wm => {
+      const next = { ...wm, [section]: value };
+      db.collection("settings").doc("worksMap").set(next).catch(e=>console.error(e));
+      return next;
+    });
+  }, []);
+
+  const updateQuadrant = useCallback(async (patch) => {
+    const next = typeof patch==="function" ? patch(worksMap.quadrant) : { ...worksMap.quadrant, ...patch };
+    await saveWorksMapSection("quadrant", next);
+  }, [worksMap.quadrant, saveWorksMapSection]);
+
+  // 四象限上の1作品分の位置（x,y）をセット・更新する。まだ登録のない作品は新規追加する。
+  const setQuadrantPoint = useCallback(async (novelId, x, y) => {
+    const pts = worksMap.quadrant.points||[];
+    const exists = pts.some(p=>p.novelId===novelId);
+    const next = exists
+      ? pts.map(p=>p.novelId===novelId?{...p,x,y}:p)
+      : [...pts, {novelId,x,y}];
+    await updateQuadrant({ points: next });
+  }, [worksMap.quadrant, updateQuadrant]);
+
+  const removeQuadrantPoint = useCallback(async (novelId) => {
+    await updateQuadrant({ points:(worksMap.quadrant.points||[]).filter(p=>p.novelId!==novelId) });
+  }, [worksMap.quadrant, updateQuadrant]);
+
+  const updateRadar = useCallback(async (patch) => {
+    const next = typeof patch==="function" ? patch(worksMap.radar) : { ...worksMap.radar, ...patch };
+    await saveWorksMapSection("radar", next);
+  }, [worksMap.radar, saveWorksMapSection]);
+
+  const addRadarAxis = useCallback(async () => {
+    const aid = uid();
+    const axes = [...(worksMap.radar.axes||[]), { id:aid, label:"新しい軸" }];
+    await updateRadar({ axes });
+    return aid;
+  }, [worksMap.radar, updateRadar]);
+
+  const updateRadarAxis = useCallback(async (axisId, patch) => {
+    const axes = (worksMap.radar.axes||[]).map(a=>a.id===axisId?{...a,...patch}:a);
+    await updateRadar({ axes });
+  }, [worksMap.radar, updateRadar]);
+
+  const deleteRadarAxis = useCallback(async (axisId) => {
+    const axes = (worksMap.radar.axes||[]).filter(a=>a.id!==axisId);
+    // 該当軸の数値も全作品分まとめて削除する
+    const values = Object.fromEntries(Object.entries(worksMap.radar.values||{}).map(([nid,v])=>{
+      const v2 = {...v}; delete v2[axisId]; return [nid,v2];
+    }));
+    await updateRadar({ axes, values });
+  }, [worksMap.radar, updateRadar]);
+
+  const toggleRadarNovel = useCallback(async (novelId) => {
+    const ids = worksMap.radar.novelIds||[];
+    const has = ids.includes(novelId);
+    const novelIds = has ? ids.filter(id=>id!==novelId) : [...ids, novelId];
+    await updateRadar({ novelIds });
+  }, [worksMap.radar, updateRadar]);
+
+  const setRadarValue = useCallback(async (novelId, axisId, value) => {
+    const values = { ...(worksMap.radar.values||{}) };
+    values[novelId] = { ...(values[novelId]||{}), [axisId]: value };
+    await updateRadar({ values });
+  }, [worksMap.radar, updateRadar]);
+
+  const updateFlowchart = useCallback(async (patch) => {
+    const next = typeof patch==="function" ? patch(worksMap.flowchart) : { ...worksMap.flowchart, ...patch };
+    await saveWorksMapSection("flowchart", next);
+  }, [worksMap.flowchart, saveWorksMapSection]);
+
+  const addFlowNode = useCallback(async (kind="question") => {
+    const nid = uid();
+    const existing = worksMap.flowchart.nodes||[];
+    const idx = existing.length;
+    const node = { id:nid, kind, text: kind==="result" ? "結果ノード" : "質問を入力",
+      novelId:"", x: 140+(idx%3)*200, y: 100+Math.floor(idx/3)*150 };
+    await updateFlowchart({ nodes:[...existing, node] });
+    return nid;
+  }, [worksMap.flowchart, updateFlowchart]);
+
+  const updateFlowNode = useCallback(async (nodeId, patch) => {
+    const nodes = (worksMap.flowchart.nodes||[]).map(n=>n.id===nodeId?{...n,...patch}:n);
+    await updateFlowchart({ nodes });
+  }, [worksMap.flowchart, updateFlowchart]);
+
+  const deleteFlowNode = useCallback(async (nodeId) => {
+    const nodes = (worksMap.flowchart.nodes||[]).filter(n=>n.id!==nodeId);
+    const edges = (worksMap.flowchart.edges||[]).filter(e=>e.fromId!==nodeId && e.toId!==nodeId);
+    await updateFlowchart({ nodes, edges });
+  }, [worksMap.flowchart, updateFlowchart]);
+
+  const addFlowEdge = useCallback(async (fromId, toId) => {
+    const eid = uid();
+    const edge = { id:eid, fromId, toId, label:"" };
+    await updateFlowchart({ edges:[...(worksMap.flowchart.edges||[]), edge] });
+    return eid;
+  }, [worksMap.flowchart, updateFlowchart]);
+
+  const updateFlowEdge = useCallback(async (edgeId, patch) => {
+    const edges = (worksMap.flowchart.edges||[]).map(e=>e.id===edgeId?{...e,...patch}:e);
+    await updateFlowchart({ edges });
+  }, [worksMap.flowchart, updateFlowchart]);
+
+  const deleteFlowEdge = useCallback(async (edgeId) => {
+    const edges = (worksMap.flowchart.edges||[]).filter(e=>e.id!==edgeId);
+    await updateFlowchart({ edges });
+  }, [worksMap.flowchart, updateFlowchart]);
+
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
     addMessage, deleteMessage, markRead,
     addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
@@ -492,7 +659,10 @@ function useStore() {
     addCharRelation, updateCharRelation, deleteCharRelation,
     addCharGroup, updateCharGroup, deleteCharGroup, toggleCharGroupMember,
     addMurmur, deleteMurmur, updateMurmur,
-    motokoStories, updateMotokoStory, addMotokoStory, deleteMotokoStory };
+    motokoStories, updateMotokoStory, addMotokoStory, deleteMotokoStory,
+    worksMap, updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
+    updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
+    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge };
 }
 
 // ═══════════════ HELPERS ═══════════════
@@ -1294,6 +1464,106 @@ function Styles({site, lightMode}){
     .tensen-item-source:hover{color:var(--accent)}
     .tensen-empty{padding:60px 0;text-align:center;color:var(--txt3);font-size:13px;line-height:2}
 
+    /* ═══ 作品マップ（閲覧用） ═══ */
+    .wmap-wrap{max-width:920px;margin:0 auto;padding:calc(var(--nav-h) + 50px) 48px 100px}
+    .wmap-eyebrow{font-family:var(--serif);font-size:13px;color:var(--txt3);letter-spacing:.2em;margin-bottom:10px}
+    .wmap-title{font-family:var(--serif);font-size:30px;font-weight:300;color:var(--txt);letter-spacing:.1em;margin-bottom:8px}
+    .wmap-desc{font-size:12.5px;color:var(--txt3);line-height:1.9;margin-bottom:36px;max-width:560px}
+    .wmap-section{margin-top:8px}
+    .wmap-section-head{margin-bottom:24px}
+    .wmap-section-title{font-family:var(--serif);font-size:20px;font-weight:300;color:var(--txt);letter-spacing:.06em;margin-bottom:6px}
+    .wmap-section-desc{font-size:12px;color:var(--txt3);line-height:1.8}
+    .wmap-empty{padding:60px 20px;text-align:center;color:var(--txt3);font-size:13px;line-height:2;border:1px dashed var(--border-hi);border-radius:3px}
+
+    .wmap-quadrant-wrap{display:flex;flex-direction:column;gap:20px}
+    .wmap-quadrant-svg{width:100%;height:auto;overflow:visible}
+    .wmap-axis-line{stroke:var(--border-hi);stroke-width:1;stroke-dasharray:3 4}
+    .wmap-axis-box{fill:none;stroke:var(--border);stroke-width:1}
+    .wmap-axis-label{font-family:var(--body);font-size:11px;letter-spacing:.1em;fill:var(--txt3)}
+    .wmap-point-g{cursor:pointer}
+    .wmap-point-dot{stroke:var(--bg);stroke-width:2;transition:r .15s}
+    .wmap-point-tag-bg{fill:var(--bg);stroke:var(--border-hi);stroke-width:1}
+    .wmap-point-tag-text{font-family:var(--body);font-size:11px;fill:var(--txt);letter-spacing:.02em}
+
+    .wmap-legend{display:flex;flex-wrap:wrap;gap:8px 18px}
+    .wmap-legend-item{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--txt2);cursor:pointer;background:none;border:none;font-family:var(--body);padding:4px 0;letter-spacing:.03em;transition:color .2s}
+    .wmap-legend-item:hover{color:var(--accent)}
+    .wmap-legend-item.active{color:var(--accent)}
+    .wmap-legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+    .wmap-radar-wrap{display:flex;flex-direction:column;gap:20px;align-items:center}
+    .wmap-radar-svg{width:100%;max-width:560px;height:auto;overflow:visible}
+    .wmap-radar-ring{fill:none;stroke:var(--border);stroke-width:1}
+    .wmap-radar-spoke{stroke:var(--border-hi);stroke-width:1}
+    .wmap-radar-axis-label{font-family:var(--body);font-size:11px;letter-spacing:.06em;fill:var(--txt2)}
+
+    .wmap-flow-wrap{display:flex;flex-direction:column;gap:28px}
+    .wmap-flow-overview{width:100%;overflow:auto;border:1px solid var(--border);border-radius:2px;background:color-mix(in srgb,var(--bg) 94%,#fff 1%);padding:8px}
+    .wmap-flow-svg{display:block;min-width:640px}
+    .wmap-flow-edge{stroke:var(--border-hi);stroke-width:1.4}
+    .wmap-flow-edge-bg{fill:var(--bg);opacity:.9}
+    .wmap-flow-edge-label{font-family:var(--body);font-size:9px;fill:var(--txt3);letter-spacing:.02em}
+    .wmap-flow-node-q{fill:var(--surface);stroke:var(--border-hi);stroke-width:1.3;transition:stroke .2s,fill .2s}
+    .wmap-flow-node-q.current{stroke:var(--accent);fill:var(--accent-dim)}
+    .wmap-flow-node-result{fill:var(--accent-dim);stroke:var(--accent);stroke-width:1.6}
+    .wmap-flow-node-result.current{fill:var(--accent);fill-opacity:.3}
+    .wmap-flow-node-text{font-family:var(--body);font-size:10.5px;fill:var(--txt);letter-spacing:.02em;pointer-events:none}
+    .wmap-flow-interactive{border:1px solid var(--border-hi);border-radius:3px;padding:32px 30px;background:color-mix(in srgb,var(--bg) 92%,#888 8%);min-height:160px;display:flex;align-items:center}
+    .wmap-flow-question{width:100%}
+    .wmap-flow-question-text{font-family:var(--serif);font-size:18px;font-weight:300;color:var(--txt);letter-spacing:.06em;line-height:1.7;margin-bottom:22px}
+    .wmap-flow-options{display:flex;flex-direction:column;gap:10px}
+    .wmap-flow-option-btn{background:none;border:1px solid var(--border-hi);color:var(--txt2);font-family:var(--body);font-size:13px;letter-spacing:.04em;padding:13px 18px;text-align:left;cursor:pointer;border-radius:2px;transition:all .2s}
+    .wmap-flow-option-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .wmap-flow-result{width:100%;text-align:center}
+    .wmap-flow-result-label{font-size:9px;letter-spacing:.32em;color:var(--accent);text-transform:uppercase;margin-bottom:14px}
+    .wmap-flow-result-title{font-family:var(--serif);font-size:26px;font-weight:300;color:var(--txt);letter-spacing:.06em;margin-bottom:8px}
+    .wmap-flow-result-sub{font-size:12px;color:var(--txt3);font-style:italic;margin-bottom:24px}
+    .wmap-flow-result-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+    /* ═══ 作品マップ（管理パネル：編集用） ═══ */
+    .wmap-admin-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:28px;flex-wrap:wrap}
+    .wmap-admin-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 4px;margin-right:28px;cursor:pointer;font-family:var(--body);font-size:11px;letter-spacing:.16em;color:var(--txt3);transition:all .2s}
+    .wmap-admin-tab.active{border-bottom-color:var(--accent);color:var(--accent)}
+    .wmap-admin-hint{font-size:11px;color:var(--txt3);margin-bottom:18px;line-height:1.8}
+    .wmap-admin-subhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap}
+
+    .wmap-quad-editor-canvas{position:relative;width:100%;height:420px;border:1px solid var(--border-hi);border-radius:2px;background:
+      linear-gradient(var(--border) 1px,transparent 1px) 0 0/10% 10%,
+      linear-gradient(90deg,var(--border) 1px,transparent 1px) 0 0/10% 10%;
+      overflow:hidden}
+    .wmap-quad-editor-cross{position:absolute;inset:0;pointer-events:none}
+    .wmap-quad-editor-axislabel{position:absolute;font-size:10px;letter-spacing:.1em;color:var(--txt3);pointer-events:none}
+    .wmap-quad-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:grab;user-select:none;transform:translate(-50%,-50%);touch-action:none}
+    .wmap-quad-node.dragging{cursor:grabbing;z-index:5}
+    .wmap-quad-node-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--bg);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+    .wmap-quad-node-label{font-size:10px;color:var(--txt2);letter-spacing:.02em;white-space:nowrap;background:var(--bg);padding:1px 6px;border-radius:8px;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+
+    .wmap-radar-axis-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+    .wmap-radar-axis-row:last-child{border-bottom:none}
+    .wmap-novel-pick-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+    .wmap-novel-pick-row:last-child{border-bottom:none}
+    .wmap-value-table{width:100%;border-collapse:collapse;margin-top:6px}
+    .wmap-value-table th{font-size:9px;letter-spacing:.1em;color:var(--txt3);text-transform:uppercase;text-align:left;padding:8px 8px;border-bottom:1px solid var(--border-hi);white-space:nowrap}
+    .wmap-value-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+    .wmap-value-table input[type=range]{width:100%;accent-color:var(--accent)}
+    .wmap-value-num{font-size:11px;color:var(--txt3);width:32px;display:inline-block;text-align:right}
+
+    .wmap-flow-editor-viewport{position:relative;width:100%;height:420px;border:1px solid var(--border-hi);border-radius:2px;overflow:auto;background:color-mix(in srgb,var(--bg) 96%,#fff 1%)}
+    .wmap-flow-editor-stage{position:relative;min-width:100%;min-height:100%;background:
+      linear-gradient(var(--border) 1px,transparent 1px) 0 0/24px 24px,
+      linear-gradient(90deg,var(--border) 1px,transparent 1px) 0 0/24px 24px}
+    .wmap-flow-editor-svg{position:absolute;inset:0;pointer-events:none}
+    .wmap-flow-editor-node{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;cursor:grab;user-select:none;transform:translate(-50%,-50%);touch-action:none;padding:6px 10px;font-size:10.5px;line-height:1.5;color:var(--txt);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+    .wmap-flow-editor-node.dragging{cursor:grabbing;z-index:5}
+    .wmap-flow-editor-node.q{width:116px;height:60px;background:var(--surface);border:1.5px solid var(--border-hi)}
+    .wmap-flow-editor-node.result{width:92px;height:92px;border-radius:50%;background:var(--accent-dim);border:1.5px solid var(--accent)}
+    .wmap-flow-editor-node.selected{box-shadow:0 0 0 3px var(--accent)}
+    .wmap-flow-node-row{display:flex;align-items:flex-start;gap:10px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+    .wmap-flow-node-row:last-child{border-bottom:none}
+    .wmap-flow-node-kind-badge{font-size:9px;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:3px 9px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+    .wmap-flow-edge-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+    .wmap-flow-edge-row:last-child{border-bottom:none}
+
     ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border-hi)}
     @media(max-width:680px){
       .nav{padding:0 16px}.hero{padding:calc(var(--nav-h) + 40px) 20px 60px}.section,.detail-body{padding-left:20px;padding-right:20px}
@@ -1330,10 +1600,19 @@ function Styles({site, lightMode}){
       .tensen-wrap{padding:calc(var(--nav-h) + 30px) 20px 72px}
       .tensen-title{font-size:24px}
       .tensen-tab{margin-right:20px;font-size:11px}
+      /* 作品マップのモバイル最適化 */
+      .wmap-wrap{padding:calc(var(--nav-h) + 30px) 18px 80px}
+      .wmap-title{font-size:24px}
+      .wmap-flow-interactive{padding:24px 18px}
+      .wmap-flow-question-text{font-size:16px}
+      .wmap-quad-editor-canvas{height:320px}
+      .wmap-flow-editor-viewport{height:340px}
+      .wmap-value-table{font-size:11px;display:block;overflow-x:auto;white-space:nowrap}
     }
     @media(max-width:420px){
       .reading-body{font-size:14px;line-height:1.95}
       .reading-ch-title{font-size:15px}
+      .wmap-flow-result-title{font-size:21px}
     }
   `);
 }
@@ -1817,6 +2096,271 @@ function TenSenPage({novels,onOpenNovel}){
   );
 }
 
+// ═══════════════ 作品マップ（四象限・レーダー・フローチャート） ═══════════════
+// novelsから「色」「タイトル」などの最新情報を引きつつ、worksMap側に保存された
+// 位置・数値・ノード文言を重ねて表示する。worksMap自体は管理パネルで自由に編集できる。
+function WorksMapPage({worksMap, novels, onOpenNovel}){
+  const [tab,setTab]=useState("quadrant"); // quadrant | radar | flow
+  const novelById = useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
+
+  return (
+    <div className="wmap-wrap">
+      <div className="wmap-eyebrow rise d1">WORKS MAP</div>
+      <h1 className="wmap-title rise d2">作品マップ</h1>
+      <p className="wmap-desc rise d3">投稿されたすべての作品を、いくつかの視点から見渡すページです。気になる点を押すと、その作品のページへ移動します。</p>
+      <div className="tensen-tabs rise d4" style={{flexWrap:"wrap"}}>
+        <button className={`tensen-tab ${tab==="quadrant"?"active":""}`} onClick={()=>setTab("quadrant")}>四象限マップ</button>
+        <button className={`tensen-tab ${tab==="radar"?"active":""}`} onClick={()=>setTab("radar")}>特徴レーダー</button>
+        <button className={`tensen-tab ${tab==="flow"?"active":""}`} onClick={()=>setTab("flow")}>フローチャート</button>
+      </div>
+
+      {tab==="quadrant" && (
+        <div className="wmap-section fadein">
+          <div className="wmap-section-head">
+            <div className="wmap-section-title">{worksMap.quadrant.title||"四象限マップ"}</div>
+            {worksMap.quadrant.desc && <div className="wmap-section-desc">{worksMap.quadrant.desc}</div>}
+          </div>
+          <QuadrantChart data={worksMap.quadrant} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        </div>
+      )}
+
+      {tab==="radar" && (
+        <div className="wmap-section fadein">
+          <div className="wmap-section-head">
+            <div className="wmap-section-title">{worksMap.radar.title||"特徴レーダー"}</div>
+            {worksMap.radar.desc && <div className="wmap-section-desc">{worksMap.radar.desc}</div>}
+          </div>
+          <RadarChart data={worksMap.radar} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        </div>
+      )}
+
+      {tab==="flow" && (
+        <div className="wmap-section fadein">
+          <div className="wmap-section-head">
+            <div className="wmap-section-title">{worksMap.flowchart.title||"フローチャート"}</div>
+            {worksMap.flowchart.desc && <div className="wmap-section-desc">{worksMap.flowchart.desc}</div>}
+          </div>
+          <FlowchartView data={worksMap.flowchart} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────── 四象限マトリクス（閲覧用） ─────────
+function QuadrantChart({data, novelById, onOpenNovel}){
+  const points=(data.points||[]).map(p=>({...p, novel:novelById[p.novelId]})).filter(p=>p.novel);
+  const [hoverId,setHoverId]=useState(null);
+  const W=720, H=560, pad=56;
+  const px = x => pad + (Math.max(0,Math.min(100,x??50))/100)*(W-pad*2);
+  const py = y => (H-pad) - (Math.max(0,Math.min(100,y??50))/100)*(H-pad*2);
+
+  if(points.length===0){
+    return <div className="wmap-empty">まだ配置された作品がありません。管理パネルの「作品マップ」から登録できます。</div>;
+  }
+
+  return (
+    <div className="wmap-quadrant-wrap">
+      <svg className="wmap-quadrant-svg" viewBox={`0 0 ${W} ${H}`} width="100%">
+        {/* 背景グリッドと中心線 */}
+        <line x1={pad} y1={H/2} x2={W-pad} y2={H/2} className="wmap-axis-line"/>
+        <line x1={W/2} y1={pad} x2={W/2} y2={H-pad} className="wmap-axis-line"/>
+        <rect x={pad} y={pad} width={W-pad*2} height={H-pad*2} className="wmap-axis-box"/>
+        {/* 軸ラベル */}
+        <text x={W-pad+8} y={H/2+4} className="wmap-axis-label" textAnchor="start">{data.xRightLabel||"右"}</text>
+        <text x={pad-8} y={H/2+4} className="wmap-axis-label" textAnchor="end">{data.xLeftLabel||"左"}</text>
+        <text x={W/2} y={pad-16} className="wmap-axis-label" textAnchor="middle">{data.yTopLabel||"上"}</text>
+        <text x={W/2} y={H-pad+28} className="wmap-axis-label" textAnchor="middle">{data.yBottomLabel||"下"}</text>
+        {points.map(p=>{
+          const cx=px(p.x), cy=py(p.y);
+          const hovered=hoverId===p.novelId;
+          return (
+            <g key={p.novelId} className="wmap-point-g" onClick={()=>onOpenNovel&&onOpenNovel(p.novelId)}
+              onMouseEnter={()=>setHoverId(p.novelId)} onMouseLeave={()=>setHoverId(null)}
+              onTouchStart={()=>setHoverId(p.novelId)}>
+              <circle cx={cx} cy={cy} r={hovered?10:7} fill={p.novel.accent||"var(--accent)"} className="wmap-point-dot"/>
+              {hovered && (
+                <>
+                  <rect x={cx-70} y={cy-38} width="140" height="24" rx="3" className="wmap-point-tag-bg"/>
+                  <text x={cx} y={cy-21} className="wmap-point-tag-text" textAnchor="middle">{p.novel.title}</text>
+                </>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="wmap-legend">
+        {points.map(p=>(
+          <div key={p.novelId} className="wmap-legend-item" onClick={()=>onOpenNovel&&onOpenNovel(p.novelId)}>
+            <span className="wmap-legend-dot" style={{background:p.novel.accent||"var(--accent)"}}/>{p.novel.title}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ───────── レーダーチャート（閲覧用） ─────────
+function RadarChart({data, novelById, onOpenNovel}){
+  const axes=data.axes||[];
+  const novelIds=(data.novelIds||[]).filter(id=>novelById[id]);
+  const [activeId,setActiveId]=useState(null);
+  const visibleIds = activeId ? [activeId] : novelIds;
+
+  if(axes.length<3 || novelIds.length===0){
+    return <div className="wmap-empty">レーダーチャートを表示するには、管理パネルで軸（3つ以上）と作品を登録してください。</div>;
+  }
+
+  const W=560, H=560, cx=W/2, cy=H/2, R=Math.min(W,H)/2-72;
+  const angleFor = i => -Math.PI/2 + i*(2*Math.PI/axes.length);
+  const ptFor = (i, val) => {
+    const r = (Math.max(0,Math.min(100,val??0))/100)*R;
+    const a = angleFor(i);
+    return [cx + r*Math.cos(a), cy + r*Math.sin(a)];
+  };
+  const RINGS=[0.25,0.5,0.75,1];
+  const PALETTE=["#c8a86a","#8b5cf6","#f59e0b","#38bdf8","#f87171","#4ade80","#f472b6"];
+
+  return (
+    <div className="wmap-radar-wrap">
+      <svg className="wmap-radar-svg" viewBox={`0 0 ${W} ${H}`} width="100%">
+        {RINGS.map(r=>{
+          const poly=axes.map((_,i)=>{ const a=angleFor(i); return `${cx+R*r*Math.cos(a)},${cy+R*r*Math.sin(a)}`; }).join(" ");
+          return <polygon key={r} points={poly} className="wmap-radar-ring"/>;
+        })}
+        {axes.map((ax,i)=>{
+          const a=angleFor(i);
+          const lx=cx+(R+24)*Math.cos(a), ly=cy+(R+24)*Math.sin(a);
+          return (
+            <g key={ax.id}>
+              <line x1={cx} y1={cy} x2={cx+R*Math.cos(a)} y2={cy+R*Math.sin(a)} className="wmap-radar-spoke"/>
+              <text x={lx} y={ly} className="wmap-radar-axis-label" textAnchor="middle">{ax.label}</text>
+            </g>
+          );
+        })}
+        {visibleIds.map((nid,si)=>{
+          const novel=novelById[nid];
+          if(!novel) return null;
+          const vals=(data.values||{})[nid]||{};
+          const color = novel.accent || PALETTE[si%PALETTE.length];
+          const poly=axes.map((ax,i)=>ptFor(i, vals[ax.id]).join(",")).join(" ");
+          return (
+            <polygon key={nid} points={poly} fill={color} fillOpacity={activeId?0.22:0.12}
+              stroke={color} strokeWidth={activeId?2.2:1.4} style={{cursor:"pointer",transition:"all .2s"}}
+              onClick={()=>onOpenNovel&&onOpenNovel(nid)}/>
+          );
+        })}
+      </svg>
+      <div className="wmap-legend">
+        <button className={`wmap-legend-item ${!activeId?"active":""}`} onClick={()=>setActiveId(null)}>
+          <span className="wmap-legend-dot" style={{background:"var(--txt3)"}}/>すべて重ねて表示
+        </button>
+        {novelIds.map((nid,si)=>{
+          const novel=novelById[nid];
+          const color = novel.accent || PALETTE[si%PALETTE.length];
+          return (
+            <button key={nid} className={`wmap-legend-item ${activeId===nid?"active":""}`} onClick={()=>setActiveId(activeId===nid?null:nid)}>
+              <span className="wmap-legend-dot" style={{background:color}}/>{novel.title}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ───────── フローチャート（閲覧用・質問に沿って進む） ─────────
+function FlowchartView({data, novelById, onOpenNovel}){
+  const nodes=data.nodes||[];
+  const edges=data.edges||[];
+  const startId = nodes.length>0 ? nodes[0].id : null;
+  const [currentId,setCurrentId]=useState(startId);
+  useEffect(()=>{ setCurrentId(startId); }, [startId]);
+
+  const byId = useMemo(()=>Object.fromEntries(nodes.map(n=>[n.id,n])), [nodes]);
+  const current = byId[currentId];
+  const outgoing = useMemo(()=>edges.filter(e=>e.fromId===currentId), [edges, currentId]);
+  const W=900, H=560;
+
+  if(nodes.length===0){
+    return <div className="wmap-empty">フローチャートがまだ作られていません。管理パネルで質問・結果ノードを追加してください。</div>;
+  }
+
+  const restart = () => setCurrentId(startId);
+
+  return (
+    <div className="wmap-flow-wrap">
+      <div className="wmap-flow-overview">
+        <svg className="wmap-flow-svg" viewBox={`0 0 ${W} ${H}`} width="100%">
+          {edges.map(e=>{
+            const a=byId[e.fromId], b=byId[e.toId];
+            if(!a||!b) return null;
+            const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
+            const mx=(x1+x2)/2, my=(y1+y2)/2;
+            const dim = currentId!==e.fromId;
+            return (
+              <g key={e.id} opacity={dim?0.28:1}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} className="wmap-flow-edge"/>
+                {e.label && <>
+                  <rect x={mx-32} y={my-9} width="64" height="16" className="wmap-flow-edge-bg" rx="2"/>
+                  <text x={mx} y={my+3} className="wmap-flow-edge-label" textAnchor="middle">{e.label}</text>
+                </>}
+              </g>
+            );
+          })}
+          {nodes.map(n=>{
+            const isResult=n.kind==="result";
+            const isCurrent=n.id===currentId;
+            const novel = isResult ? novelById[n.novelId] : null;
+            return (
+              <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor: isResult&&novel ? "pointer":"default"}}
+                onClick={()=> isResult && novel && onOpenNovel && onOpenNovel(n.novelId)}>
+                {isResult
+                  ? <circle cx={n.x} cy={n.y} r="46" className={`wmap-flow-node-result ${isCurrent?"current":""}`}/>
+                  : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
+                }
+                <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
+                  {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="wmap-flow-interactive">
+        {!current ? (
+          <div className="wmap-empty">開始ノードが見つかりません。</div>
+        ) : current.kind==="result" ? (
+          <div className="wmap-flow-result">
+            <div className="wmap-flow-result-label">あなたへのおすすめ</div>
+            <div className="wmap-flow-result-title">{novelById[current.novelId]?.title || current.text || "結果"}</div>
+            {novelById[current.novelId]?.subtitle && <div className="wmap-flow-result-sub">{novelById[current.novelId].subtitle}</div>}
+            <div className="wmap-flow-result-actions">
+              {novelById[current.novelId] && <button className="btn btn-primary" onClick={()=>onOpenNovel&&onOpenNovel(current.novelId)}>作品を見る →</button>}
+              <button className="btn" onClick={restart}>はじめからやり直す</button>
+            </div>
+          </div>
+        ) : (
+          <div className="wmap-flow-question">
+            <div className="wmap-flow-question-text">{current.text}</div>
+            <div className="wmap-flow-options">
+              {outgoing.length===0
+                ? <div className="wmap-empty" style={{padding:"24px 0"}}>この質問から先の分岐がまだ設定されていません。</div>
+                : outgoing.map(e=>(
+                  <button key={e.id} className="wmap-flow-option-btn" onClick={()=>setCurrentId(e.toId)}>
+                    {e.label || "次へ"} →
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════ HOME ═══════════════
 function countChars(novel) {
   return (novel.chapters||[]).reduce((s,ch)=>s+(ch.content||"").replace(/\s/g,"").length, 0);
@@ -1827,7 +2371,7 @@ function fmtCount(n) {
   return `${n.toLocaleString()}字`;
 }
 
-function HomePage({site,novels,onOpen}){
+function HomePage({site,novels,onOpen,onOpenMap}){
   const [activeTag,setActiveTag]=useState(null);
   const [byDate,setByDate]=useState(false);
   const allTags=useMemo(()=>[...new Set(novels.flatMap(n=>n.tags||[]))] ,[novels]);
@@ -1889,6 +2433,7 @@ function HomePage({site,novels,onOpen}){
         <div className="section-head rise d2">
           <h2 className="section-title">収録作品</h2>
           <div className="section-right">
+            <button className="tag-chip" onClick={onOpenMap}>🗺 作品マップ</button>
             <button className={`tag-chip ${byDate?"active":""}`} onClick={()=>setByDate(b=>!b)}>📅 年月別</button>
             <span className="section-meta">{filtered.length} / {novels.length}</span>
           </div>
@@ -3049,6 +3594,428 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
   );
 }
 
+// ═══════════════ 作品マップ 管理エディタ ═══════════════
+// 「四象限マップ」「特徴レーダー」「フローチャート」の3つを、タブで切り替えて編集する。
+// 各エディタは novels（投稿済み作品の一覧）を参照し、著者は項目（軸・質問・位置）を
+// 自由に記述・操作・配置できる。
+function WorksMapAdmin({store}){
+  const [tab,setTab]=useState("quadrant"); // quadrant | radar | flow
+  const {novels, worksMap,
+    updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
+    updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
+    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
+  } = store;
+
+  return(
+    <div>
+      <div className="admin-title">作品マップ</div>
+      <div className="wmap-admin-hint">作品一覧ページの「🗺 作品マップ」から読者が見られる、3種類の可視化を編集できます。ここでの変更は保存後すぐに公開ページへ反映されます。</div>
+      <div className="wmap-admin-tabs">
+        <button className={`wmap-admin-tab ${tab==="quadrant"?"active":""}`} onClick={()=>setTab("quadrant")}>四象限マップ</button>
+        <button className={`wmap-admin-tab ${tab==="radar"?"active":""}`} onClick={()=>setTab("radar")}>特徴レーダー</button>
+        <button className={`wmap-admin-tab ${tab==="flow"?"active":""}`} onClick={()=>setTab("flow")}>フローチャート</button>
+      </div>
+      {tab==="quadrant" && (
+        <QuadrantEditor
+          novels={novels} data={worksMap.quadrant}
+          onUpdate={updateQuadrant} onSetPoint={setQuadrantPoint} onRemovePoint={removeQuadrantPoint}
+        />
+      )}
+      {tab==="radar" && (
+        <RadarEditor
+          novels={novels} data={worksMap.radar}
+          onUpdate={updateRadar} onAddAxis={addRadarAxis} onUpdateAxis={updateRadarAxis} onDeleteAxis={deleteRadarAxis}
+          onToggleNovel={toggleRadarNovel} onSetValue={setRadarValue}
+        />
+      )}
+      {tab==="flow" && (
+        <FlowchartEditor
+          novels={novels} data={worksMap.flowchart}
+          onUpdate={updateFlowchart} onAddNode={addFlowNode} onUpdateNode={updateFlowNode} onDeleteNode={deleteFlowNode}
+          onAddEdge={addFlowEdge} onUpdateEdge={updateFlowEdge} onDeleteEdge={deleteFlowEdge}
+        />
+      )}
+    </div>
+  );
+}
+
+// ───────── 四象限マップ エディタ ─────────
+function QuadrantEditor({novels, data, onUpdate, onSetPoint, onRemovePoint}){
+  const stageRef=useRef(null);
+  const dragRef=useRef(null);
+  const [dragging,setDragging]=useState(null);
+  const points=data.points||[];
+  const placedIds=new Set(points.map(p=>p.novelId));
+  const unplaced=novels.filter(n=>!placedIds.has(n.id));
+  const byId=useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
+
+  const getStageRect=()=>stageRef.current?.getBoundingClientRect();
+
+  const startDrag=(e,novelId)=>{
+    e.preventDefault();
+    const rect=getStageRect();
+    if(!rect) return;
+    const p=points.find(pt=>pt.novelId===novelId);
+    const clientX=e.touches?e.touches[0].clientX:e.clientX;
+    const clientY=e.touches?e.touches[0].clientY:e.clientY;
+    dragRef.current={ novelId, startX:clientX, startY:clientY, origX:p?.x??50, origY:p?.y??50, rectW:rect.width, rectH:rect.height };
+    setDragging(novelId);
+  };
+
+  useEffect(()=>{
+    if(!dragging) return;
+    const move=(e)=>{
+      const d=dragRef.current;
+      if(!d) return;
+      e.preventDefault();
+      const clientX=e.touches?e.touches[0].clientX:e.clientX;
+      const clientY=e.touches?e.touches[0].clientY:e.clientY;
+      const dx=clientX-d.startX, dy=clientY-d.startY;
+      const nx=Math.max(0,Math.min(100, d.origX + (dx/d.rectW)*100));
+      // 画面上は「上が高い数値」になるよう、Y方向は反転して保存する
+      const ny=Math.max(0,Math.min(100, d.origY - (dy/d.rectH)*100));
+      onSetPoint(d.novelId, Math.round(nx), Math.round(ny));
+    };
+    const end=()=>{ dragRef.current=null; setDragging(null); };
+    window.addEventListener("mousemove",move);
+    window.addEventListener("mouseup",end);
+    window.addEventListener("touchmove",move,{passive:false});
+    window.addEventListener("touchend",end);
+    return ()=>{
+      window.removeEventListener("mousemove",move);
+      window.removeEventListener("mouseup",end);
+      window.removeEventListener("touchmove",move);
+      window.removeEventListener("touchend",end);
+    };
+  },[dragging,onSetPoint]);
+
+  // 画面上のpx位置（左上原点）⇄ 保存用の0-100座標（Y反転）の相互変換
+  const toPct=(x,y,rect)=>({ left:`${x}%`, top:`${100-y}%` });
+
+  return(
+    <div>
+      <div className="wmap-admin-hint">2つの軸（左右・上下）の意味を自由に記述してください。下の枠内で作品のドットをドラッグすると、位置がそのまま保存されます。</div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">セクションタイトル</label><BufferedInput className="form-input" value={data.title||""} onCommit={v=>onUpdate({title:v})}/></div>
+        <div className="form-group"><label className="form-label">補足説明</label><BufferedInput className="form-input" value={data.desc||""} onCommit={v=>onUpdate({desc:v})}/></div>
+      </div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">横軸：左側のラベル</label><BufferedInput className="form-input" value={data.xLeftLabel||""} onCommit={v=>onUpdate({xLeftLabel:v})} placeholder="例：軽い"/></div>
+        <div className="form-group"><label className="form-label">横軸：右側のラベル</label><BufferedInput className="form-input" value={data.xRightLabel||""} onCommit={v=>onUpdate({xRightLabel:v})} placeholder="例：重い"/></div>
+      </div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">縦軸：上側のラベル</label><BufferedInput className="form-input" value={data.yTopLabel||""} onCommit={v=>onUpdate({yTopLabel:v})} placeholder="例：動"/></div>
+        <div className="form-group"><label className="form-label">縦軸：下側のラベル</label><BufferedInput className="form-input" value={data.yBottomLabel||""} onCommit={v=>onUpdate({yBottomLabel:v})} placeholder="例：静"/></div>
+      </div>
+
+      <div className="wmap-admin-subhead"><span className="form-label" style={{margin:0}}>配置エリア</span></div>
+      <div className="wmap-quad-editor-canvas" ref={stageRef}>
+        <div className="wmap-quad-editor-axislabel" style={{top:6,left:"50%",transform:"translateX(-50%)"}}>{data.yTopLabel||"上"}</div>
+        <div className="wmap-quad-editor-axislabel" style={{bottom:6,left:"50%",transform:"translateX(-50%)"}}>{data.yBottomLabel||"下"}</div>
+        <div className="wmap-quad-editor-axislabel" style={{left:6,top:"50%",transform:"translateY(-50%)"}}>{data.xLeftLabel||"左"}</div>
+        <div className="wmap-quad-editor-axislabel" style={{right:6,top:"50%",transform:"translateY(-50%)"}}>{data.xRightLabel||"右"}</div>
+        {points.map(p=>{
+          const novel=byId[p.novelId];
+          if(!novel) return null;
+          const pos=toPct(p.x??50,p.y??50);
+          return(
+            <div key={p.novelId} className={`wmap-quad-node ${dragging===p.novelId?"dragging":""}`}
+              style={{left:pos.left, top:pos.top}}
+              onMouseDown={e=>startDrag(e,p.novelId)} onTouchStart={e=>startDrag(e,p.novelId)}>
+              <div className="wmap-quad-node-dot" style={{background:novel.accent||"#c8a86a"}}/>
+              <div className="wmap-quad-node-label">{novel.title}</div>
+            </div>
+          );
+        })}
+        {points.length===0 && <div className="char-editor-empty">下の「作品を追加」から、配置したい作品を選んでください。</div>}
+      </div>
+
+      <div style={{marginTop:20}}>
+        <div className="wmap-admin-subhead"><span className="form-label" style={{margin:0}}>配置済みの作品 ({points.length})</span></div>
+        {points.length===0
+          ? <div style={{padding:"10px 0",color:"var(--txt3)",fontSize:12}}>まだ配置された作品がありません</div>
+          : points.map(p=>{
+            const novel=byId[p.novelId];
+            if(!novel) return null;
+            return(
+              <div key={p.novelId} className="char-rel-row">
+                <span style={{flex:1,fontSize:13,color:"var(--txt)"}}>{novel.title}</span>
+                <span style={{fontSize:11,color:"var(--txt3)"}}>x:{p.x??50} / y:{p.y??50}</span>
+                <button className="icon-btn danger" onClick={()=>onRemovePoint(p.novelId)}>🗑</button>
+              </div>
+            );
+          })
+        }
+      </div>
+
+      {unplaced.length>0 && (
+        <div style={{marginTop:20,paddingTop:20,borderTop:"1px solid var(--border)"}}>
+          <div className="wmap-admin-subhead"><span className="form-label" style={{margin:0}}>作品を追加</span></div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {unplaced.map(n=>(
+              <button key={n.id} className="btn" onClick={()=>onSetPoint(n.id,50,50)}>＋ {n.title}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────── 特徴レーダー エディタ ─────────
+function RadarEditor({novels, data, onUpdate, onAddAxis, onUpdateAxis, onDeleteAxis, onToggleNovel, onSetValue}){
+  const axes=data.axes||[];
+  const selectedIds=data.novelIds||[];
+  const values=data.values||{};
+  const byId=useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
+
+  return(
+    <div>
+      <div className="wmap-admin-hint">テーマ軸（質問項目）を3つ以上登録し、表示したい作品を選んだうえで、各軸ごとの数値（0〜100）をスライダーで設定してください。</div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">セクションタイトル</label><BufferedInput className="form-input" value={data.title||""} onCommit={v=>onUpdate({title:v})}/></div>
+        <div className="form-group"><label className="form-label">補足説明</label><BufferedInput className="form-input" value={data.desc||""} onCommit={v=>onUpdate({desc:v})}/></div>
+      </div>
+
+      <div className="wmap-admin-subhead">
+        <span className="form-label" style={{margin:0}}>テーマ軸（質問項目） ({axes.length})</span>
+        <button className="btn btn-primary" style={{padding:"7px 16px",fontSize:11}} onClick={onAddAxis}>＋ 軸を追加</button>
+      </div>
+      {axes.length===0
+        ? <div style={{padding:"16px 0",color:"var(--txt3)",fontSize:12}}>まだ軸が登録されていません（3つ以上を推奨）</div>
+        : axes.map(ax=>(
+          <div key={ax.id} className="wmap-radar-axis-row">
+            <BufferedInput key={ax.id+":label"} className="form-input" style={{flex:1,minWidth:140}} value={ax.label||""} onCommit={v=>onUpdateAxis(ax.id,{label:v})} placeholder="軸の名前（例：心理描写）"/>
+            <button className="icon-btn danger" onClick={()=>onDeleteAxis(ax.id)}>🗑</button>
+          </div>
+        ))
+      }
+
+      <div style={{marginTop:28,paddingTop:20,borderTop:"1px solid var(--border)"}}>
+        <div className="wmap-admin-subhead"><span className="form-label" style={{margin:0}}>表示する作品 ({selectedIds.length})</span></div>
+        <div className="wmap-admin-hint" style={{marginBottom:10}}>多くなりすぎると重なって見づらくなるため、5作品前後がおすすめです。</div>
+        {novels.length===0
+          ? <div style={{padding:"10px 0",color:"var(--txt3)",fontSize:12}}>作品がありません</div>
+          : novels.map(n=>{
+            const checked=selectedIds.includes(n.id);
+            return(
+              <div key={n.id} className="wmap-novel-pick-row">
+                <label className={`char-group-chip ${checked?"checked":""}`} style={{cursor:"pointer"}}>
+                  <input type="checkbox" checked={checked} onChange={()=>onToggleNovel(n.id)}/>
+                  {n.title}
+                </label>
+              </div>
+            );
+          })
+        }
+      </div>
+
+      {selectedIds.length>0 && axes.length>0 && (
+        <div style={{marginTop:28,paddingTop:20,borderTop:"1px solid var(--border)",overflowX:"auto"}}>
+          <div className="wmap-admin-subhead"><span className="form-label" style={{margin:0}}>各作品の数値（0〜100）</span></div>
+          <table className="wmap-value-table">
+            <thead>
+              <tr>
+                <th>作品</th>
+                {axes.map(ax=><th key={ax.id}>{ax.label||"軸"}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {selectedIds.map(nid=>{
+                const novel=byId[nid];
+                if(!novel) return null;
+                const v=values[nid]||{};
+                return(
+                  <tr key={nid}>
+                    <td style={{color:"var(--txt)",fontSize:12,whiteSpace:"nowrap"}}>{novel.title}</td>
+                    {axes.map(ax=>(
+                      <td key={ax.id} style={{minWidth:120}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <input type="range" min="0" max="100" value={v[ax.id]??50}
+                            onChange={e=>onSetValue(nid,ax.id,Number(e.target.value))}/>
+                          <span className="wmap-value-num">{v[ax.id]??50}</span>
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────── フローチャート エディタ ─────────
+// 質問ノード・結果ノードをドラッグで自由配置し、矢印（分岐）でつなぐ。
+// 構造はキャラクター相関図エディタと同様の考え方。
+function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDeleteNode, onAddEdge, onUpdateEdge, onDeleteEdge}){
+  const nodes=data.nodes||[];
+  const edges=data.edges||[];
+  const [selectedId,setSelectedId]=useState(null);
+  const stageRef=useRef(null);
+  const dragRef=useRef(null);
+  const [dragging,setDragging]=useState(null);
+  const byId=useMemo(()=>Object.fromEntries(nodes.map(n=>[n.id,n])), [nodes]);
+  const novelById=useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
+
+  const canvasW=Math.max(900, ...nodes.map(n=>(n.x??100)+170), 900);
+  const canvasH=Math.max(520, ...nodes.map(n=>(n.y??100)+170), 520);
+
+  const getStageRect=()=>stageRef.current?.getBoundingClientRect();
+
+  const startDrag=(e,nodeId)=>{
+    e.preventDefault();
+    const rect=getStageRect();
+    const n=byId[nodeId];
+    if(!rect||!n) return;
+    const clientX=e.touches?e.touches[0].clientX:e.clientX;
+    const clientY=e.touches?e.touches[0].clientY:e.clientY;
+    dragRef.current={ nodeId, startX:clientX, startY:clientY, origX:n.x??100, origY:n.y??100 };
+    setDragging(nodeId);
+    setSelectedId(nodeId);
+  };
+
+  useEffect(()=>{
+    if(!dragging) return;
+    const move=(e)=>{
+      const d=dragRef.current;
+      if(!d) return;
+      e.preventDefault();
+      const clientX=e.touches?e.touches[0].clientX:e.clientX;
+      const clientY=e.touches?e.touches[0].clientY:e.clientY;
+      const dx=clientX-d.startX, dy=clientY-d.startY;
+      const nx=Math.max(50, d.origX+dx);
+      const ny=Math.max(50, d.origY+dy);
+      onUpdateNode(d.nodeId, {x:Math.round(nx), y:Math.round(ny)});
+    };
+    const end=()=>{ dragRef.current=null; setDragging(null); };
+    window.addEventListener("mousemove",move);
+    window.addEventListener("mouseup",end);
+    window.addEventListener("touchmove",move,{passive:false});
+    window.addEventListener("touchend",end);
+    return ()=>{
+      window.removeEventListener("mousemove",move);
+      window.removeEventListener("mouseup",end);
+      window.removeEventListener("touchmove",move);
+      window.removeEventListener("touchend",end);
+    };
+  },[dragging,onUpdateNode]);
+
+  return(
+    <div>
+      <div className="wmap-admin-hint">質問ノード（四角）と結果ノード（円）をドラッグで配置し、下の「分岐を追加」で質問から次の質問・結果へ矢印をつなげます。最初に追加したノードが開始地点になります。</div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">セクションタイトル</label><BufferedInput className="form-input" value={data.title||""} onCommit={v=>onUpdate({title:v})}/></div>
+        <div className="form-group"><label className="form-label">補足説明</label><BufferedInput className="form-input" value={data.desc||""} onCommit={v=>onUpdate({desc:v})}/></div>
+      </div>
+
+      <div className="wmap-admin-subhead">
+        <span className="form-label" style={{margin:0}}>キャンバス</span>
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn" onClick={async()=>{ const id=await onAddNode("question"); setSelectedId(id); }}>＋ 質問ノード</button>
+          <button className="btn btn-primary" onClick={async()=>{ const id=await onAddNode("result"); setSelectedId(id); }}>＋ 結果ノード</button>
+        </div>
+      </div>
+
+      {nodes.length===0
+        ? <div className="char-editor-viewport"><div className="char-editor-empty">上のボタンから、質問ノードや結果ノードを追加してください。</div></div>
+        : (
+          <div className="wmap-flow-editor-viewport">
+            <div className="wmap-flow-editor-stage" ref={stageRef} style={{width:canvasW,height:canvasH}}>
+              <svg className="wmap-flow-editor-svg" width={canvasW} height={canvasH}>
+                {edges.map(e=>{
+                  const a=byId[e.fromId], b=byId[e.toId];
+                  if(!a||!b) return null;
+                  const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
+                  const geo=arrowGeometry(x1,y1,x2,y2,"end",50,9);
+                  const mx=(x1+x2)/2, my=(y1+y2)/2;
+                  return(
+                    <g key={e.id}>
+                      <line x1={geo.lx1} y1={geo.ly1} x2={geo.lx2} y2={geo.ly2} stroke="var(--accent)" strokeWidth="1.5" opacity="0.65"/>
+                      {geo.endArrowPoints && <polygon points={geo.endArrowPoints} fill="var(--accent)" opacity="0.85"/>}
+                      {e.label && <text x={mx} y={my-6} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{e.label}</text>}
+                    </g>
+                  );
+                })}
+              </svg>
+              {nodes.map(n=>{
+                const isResult=n.kind==="result";
+                const novel=isResult?novelById[n.novelId]:null;
+                return(
+                  <div key={n.id}
+                    className={`wmap-flow-editor-node ${isResult?"result":"q"} ${dragging===n.id?"dragging":""} ${selectedId===n.id?"selected":""}`}
+                    style={{left:n.x??100, top:n.y??100}}
+                    onMouseDown={e=>startDrag(e,n.id)} onTouchStart={e=>startDrag(e,n.id)}
+                    onClick={()=>setSelectedId(n.id)}>
+                    {isResult ? (novel?novel.title:(n.text||"結果")) : (n.text||"質問")}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )
+      }
+
+      <div style={{marginTop:24}}>
+        <div className="wmap-admin-subhead"><span className="form-label" style={{margin:0}}>ノード一覧 ({nodes.length})</span></div>
+        {nodes.length===0
+          ? <div style={{padding:"10px 0",color:"var(--txt3)",fontSize:12}}>まだノードがありません</div>
+          : nodes.map((n,i)=>{
+            const isResult=n.kind==="result";
+            return(
+              <div key={n.id} className="wmap-flow-node-row">
+                <span className="wmap-flow-node-kind-badge">{isResult?"結果":"質問"}{i===0?"・開始":""}</span>
+                <div style={{flex:1,minWidth:180}}>
+                  {isResult ? (
+                    <select className="char-rel-select" style={{width:"100%"}} value={n.novelId||""} onChange={e=>onUpdateNode(n.id,{novelId:e.target.value})}>
+                      <option value="">（作品を選択せず文章のみ表示）</option>
+                      {novels.map(nv=><option key={nv.id} value={nv.id}>{nv.title}</option>)}
+                    </select>
+                  ) : (
+                    <BufferedTextarea key={n.id+":text"} className="form-textarea" style={{minHeight:60}} value={n.text||""} onCommit={v=>onUpdateNode(n.id,{text:v})} rows={2} placeholder="質問文を入力（例：今夜は静かな気分？）"/>
+                  )}
+                  {isResult && (
+                    <BufferedInput key={n.id+":text2"} className="form-input" style={{marginTop:8}} value={n.text||""} onCommit={v=>onUpdateNode(n.id,{text:v})} placeholder="作品を選ばない場合に表示する文章（任意）"/>
+                  )}
+                </div>
+                <button className="icon-btn danger" onClick={()=>onDeleteNode(n.id)}>🗑</button>
+              </div>
+            );
+          })
+        }
+      </div>
+
+      {nodes.length>=2 && (
+        <div style={{marginTop:28,paddingTop:20,borderTop:"1px solid var(--border)"}}>
+          <div className="wmap-admin-subhead">
+            <span className="form-label" style={{margin:0}}>分岐（矢印） ({edges.length})</span>
+            <button className="btn btn-primary" style={{padding:"7px 16px",fontSize:11}} onClick={()=>onAddEdge(nodes[0].id, nodes[1].id)}>＋ 分岐を追加</button>
+          </div>
+          {edges.length===0
+            ? <div style={{padding:"10px 0",color:"var(--txt3)",fontSize:12}}>まだ分岐がありません</div>
+            : edges.map(e=>(
+              <div key={e.id} className="wmap-flow-edge-row">
+                <select className="char-rel-select" value={e.fromId} onChange={ev=>onUpdateEdge(e.id,{fromId:ev.target.value})}>
+                  {nodes.map(n=><option key={n.id} value={n.id}>{n.kind==="result"?"🔵":"⬜"} {(n.text||(n.kind==="result"?"結果":"質問")).slice(0,16)}</option>)}
+                </select>
+                <span className="char-rel-arrow">→</span>
+                <select className="char-rel-select" value={e.toId} onChange={ev=>onUpdateEdge(e.id,{toId:ev.target.value})}>
+                  {nodes.map(n=><option key={n.id} value={n.id}>{n.kind==="result"?"🔵":"⬜"} {(n.text||(n.kind==="result"?"結果":"質問")).slice(0,16)}</option>)}
+                </select>
+                <BufferedInput key={e.id+":label"} className="form-input" style={{flex:1,minWidth:120}} value={e.label||""} onCommit={v=>onUpdateEdge(e.id,{label:v})} placeholder="選択肢の文言（例：はい）"/>
+                <button className="icon-btn danger" onClick={()=>onDeleteEdge(e.id)}>🗑</button>
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════ ADMIN ═══════════════
 function AdminPanel({store,onClose}){
   const {site,setSite,author,setAuthor,novels,messages,deleteMessage,markRead,
@@ -3103,6 +4070,7 @@ function AdminPanel({store,onClose}){
     {id:"messages",label:"受信メッセージ",icon:"✉️",badge:unread},
     {id:"theme",label:"デザイン・テーマ",icon:"🎨"},
     {id:"novels",label:"作品管理",icon:"📚"},
+    {id:"worksmap",label:"作品マップ",icon:"🗺"},
   ];
 
   const [menuSelected, setMenuSelected] = useState(false);
@@ -3442,6 +4410,12 @@ function AdminPanel({store,onClose}){
               })()}
             </div>
             <button className="btn btn-primary" onClick={async()=>{ const id=await addNovel(); setEditNid(id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); scrollAdminTop(); }}>＋ 新しい作品を追加</button>
+          </div>
+        )}
+
+        {sec==="worksmap"&&(
+          <div className="fadein">
+            <WorksMapAdmin store={store}/>
           </div>
         )}
 
@@ -3870,6 +4844,7 @@ function App(){
     else if(page==="hitorigoto") document.title=`ひとりごと — ${base}`;
     else if(page==="encounter") document.title=`九十九人の男たち — ${base}`;
     else if(page==="tensen") document.title=`台詞・地の文 — ${base}`;
+    else if(page==="map") document.title=`作品マップ — ${base}`;
     else if(page==="profile") document.title=`著者プロフィール — ${base}`;
     else if(page==="detail"&&liveNovel) document.title=`${liveNovel.title} — ${base}`;
     else if(page==="reading"&&liveNovel){
@@ -3932,10 +4907,11 @@ function App(){
             onLogout={handleLogout}
           />
         )}
-        {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={novels} onOpen={openNovel}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={novels} onOpen={openNovel} onOpenMap={()=>nav("map")}/>}
         {!loading&&!dbError&&!adminOpen&&page==="hitorigoto"&&<HitorigotoPage author={author}/>}
         {!loading&&!dbError&&!adminOpen&&page==="encounter"&&<EncounterPage onExit={()=>nav("home")} stories={store.motokoStories}/>}
         {!loading&&!dbError&&!adminOpen&&page==="tensen"&&<TenSenPage novels={novels} onOpenNovel={openNovelById}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="map"&&<WorksMapPage worksMap={store.worksMap} novels={novels} onOpenNovel={openNovelById}/>}
         {!loading&&!dbError&&!adminOpen&&page==="detail"&&liveNovel&&<DetailPage novel={liveNovel} onBack={()=>nav("home")} onRead={openChapter} onSendMessage={addMessage}/>}
         {!loading&&!dbError&&!adminOpen&&page==="reading"&&liveNovel&&chapterId&&<ReadingPage novel={liveNovel} chapterId={chapterId} onBack={()=>nav("detail")} onChapter={setChapterId} lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}/>}
         {!loading&&!dbError&&!adminOpen&&page==="profile"&&<ProfilePage author={author} novels={novels} onToWorks={()=>nav("home")} site={site} onSendMessage={addMessage}/>}
