@@ -2301,6 +2301,36 @@ function FlowchartView({data, novelById, onOpenNovel}){
 
   return (
     <div className="wmap-flow-wrap">
+      <div className="wmap-flow-interactive">
+        {!current ? (
+          <div className="wmap-empty">開始ノードが見つかりません。</div>
+        ) : current.kind==="result" ? (
+          <div className="wmap-flow-result">
+            <div className="wmap-flow-result-label">あなたへのおすすめ</div>
+            <div className="wmap-flow-result-title">{novelById[current.novelId]?.title || current.text || "結果"}</div>
+            {novelById[current.novelId]?.subtitle && <div className="wmap-flow-result-sub">{novelById[current.novelId].subtitle}</div>}
+            <div className="wmap-flow-result-actions">
+              {novelById[current.novelId] && <button className="btn btn-primary" onClick={()=>onOpenNovel&&onOpenNovel(current.novelId)}>作品を見る →</button>}
+              <button className="btn" onClick={restart}>はじめからやり直す</button>
+            </div>
+          </div>
+        ) : (
+          <div className="wmap-flow-question">
+            <div className="wmap-flow-question-text">{current.text}</div>
+            <div className="wmap-flow-options">
+              {outgoing.length===0
+                ? <div className="wmap-empty" style={{padding:"24px 0"}}>この質問から先の分岐がまだ設定されていません。</div>
+                : outgoing.map(e=>(
+                  <button key={e.id} className="wmap-flow-option-btn" onClick={()=>setCurrentId(e.toId)}>
+                    {e.label || "次へ"} →
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="wmap-flow-overview">
         <svg className="wmap-flow-svg" viewBox={`${vx} ${vy} ${vw} ${vh}`} width="100%">
           {edges.map(e=>{
@@ -2340,35 +2370,6 @@ function FlowchartView({data, novelById, onOpenNovel}){
         </svg>
       </div>
 
-      <div className="wmap-flow-interactive">
-        {!current ? (
-          <div className="wmap-empty">開始ノードが見つかりません。</div>
-        ) : current.kind==="result" ? (
-          <div className="wmap-flow-result">
-            <div className="wmap-flow-result-label">あなたへのおすすめ</div>
-            <div className="wmap-flow-result-title">{novelById[current.novelId]?.title || current.text || "結果"}</div>
-            {novelById[current.novelId]?.subtitle && <div className="wmap-flow-result-sub">{novelById[current.novelId].subtitle}</div>}
-            <div className="wmap-flow-result-actions">
-              {novelById[current.novelId] && <button className="btn btn-primary" onClick={()=>onOpenNovel&&onOpenNovel(current.novelId)}>作品を見る →</button>}
-              <button className="btn" onClick={restart}>はじめからやり直す</button>
-            </div>
-          </div>
-        ) : (
-          <div className="wmap-flow-question">
-            <div className="wmap-flow-question-text">{current.text}</div>
-            <div className="wmap-flow-options">
-              {outgoing.length===0
-                ? <div className="wmap-empty" style={{padding:"24px 0"}}>この質問から先の分岐がまだ設定されていません。</div>
-                : outgoing.map(e=>(
-                  <button key={e.id} className="wmap-flow-option-btn" onClick={()=>setCurrentId(e.toId)}>
-                    {e.label || "次へ"} →
-                  </button>
-                ))
-              }
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
