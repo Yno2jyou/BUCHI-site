@@ -719,7 +719,7 @@ function Styles({site, lightMode}){
   return React.createElement('style',null,`
     :root{--bg:${bg};--deep:color-mix(in srgb,${bg} 88%,#${mix} 12%);--surface:color-mix(in srgb,${bg} 80%,#${mix} 20%);--raised:color-mix(in srgb,${bg} 72%,#${mix} 28%);--txt:${txt};--txt2:${txt2};--txt3:${txt3};--border:${border};--border-hi:${borderHi};--accent:${accent};--accent-glow:${accent}2a;--accent-dim:${accent}14;--serif:${font};--body:'Noto Serif JP',serif;--nav-bg:${navBg};--nav-h:60px}
     html{scroll-behavior:smooth}body{background:var(--bg);overflow-x:hidden}
-    .app{min-height:100vh;background:var(--bg);color:var(--txt);font-family:var(--body)}
+    .app{min-height:100vh;background:var(--bg);color:var(--txt);font-family:var(--body);position:relative;isolation:isolate}
     .nav{position:relative;z-index:10}.hero{position:relative;z-index:10}.section{position:relative;z-index:10}.detail-body{position:relative;z-index:10}.reading-wrap{position:relative;z-index:10}
     .app::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
     /* NAV */
@@ -1201,7 +1201,7 @@ function Styles({site, lightMode}){
     @keyframes ptInkOut{0%{opacity:1}100%{opacity:0}}
     @keyframes ptSlideIn{0%{transform:translateX(-6%)}100%{transform:translateX(0)}}
     @keyframes driftUp{0%{transform:translateY(110vh)}100%{transform:translateY(-120px)}}
-    .bg-text-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:-1}
+    .bg-text-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
     .bg-text-col{position:absolute;top:0;display:flex;flex-direction:column;gap:2.2em;writing-mode:vertical-rl;text-orientation:mixed;font-family:var(--serif);white-space:nowrap}
     .rise{animation:rise .6s ease forwards;opacity:0}.d1{animation-delay:.04s}.d2{animation-delay:.14s}.d3{animation-delay:.26s}.d4{animation-delay:.38s}
     @keyframes fadein{from{opacity:0}to{opacity:1}}.fadein{animation:fadein .3s ease forwards}
