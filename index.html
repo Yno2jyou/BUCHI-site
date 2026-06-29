@@ -2105,10 +2105,10 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
 
   return (
     <div className="wmap-wrap">
-      {onBack && <button className="back-link" onClick={onBack} style={{marginBottom:"18px",display:"inline-block"}}>← 作品一覧へ</button>}
       <div className="wmap-eyebrow rise d1">WORKS MAP</div>
       <h1 className="wmap-title rise d2">作品マップ</h1>
       <p className="wmap-desc rise d3">投稿されたすべての作品を、いくつかの視点から見渡すページです。気になる点を押すと、その作品のページへ移動します。</p>
+      {onBack && <button className="back-link" onClick={onBack} style={{marginBottom:"24px",display:"inline-block"}}>← 作品一覧へ</button>}
       <div className="tensen-tabs rise d4" style={{flexWrap:"wrap"}}>
         <button className={`tensen-tab ${tab==="quadrant"?"active":""}`} onClick={()=>setTab("quadrant")}>四象限マップ</button>
         <button className={`tensen-tab ${tab==="radar"?"active":""}`} onClick={()=>setTab("radar")}>特徴レーダー</button>
@@ -4928,7 +4928,7 @@ function App(){
         {!loading&&!dbError&&!adminOpen&&page==="hitorigoto"&&<HitorigotoPage author={author}/>}
         {!loading&&!dbError&&!adminOpen&&page==="encounter"&&<EncounterPage onExit={()=>nav("home")} stories={store.motokoStories}/>}
         {!loading&&!dbError&&!adminOpen&&page==="tensen"&&<TenSenPage novels={novels} onOpenNovel={openNovelById}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="map"&&<WorksMapPage worksMap={store.worksMap} novels={novels} onOpenNovel={openNovelById} onBack={()=>setPage("home")}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="map"&&<WorksMapPage worksMap={store.worksMap} novels={novels} onOpenNovel={openNovelById} onBack={()=>nav("home")}/>}
         {!loading&&!dbError&&!adminOpen&&page==="detail"&&liveNovel&&<DetailPage novel={liveNovel} onBack={()=>nav("home")} onRead={openChapter} onSendMessage={addMessage}/>}
         {!loading&&!dbError&&!adminOpen&&page==="reading"&&liveNovel&&chapterId&&<ReadingPage novel={liveNovel} chapterId={chapterId} onBack={()=>nav("detail")} onChapter={setChapterId} lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}/>}
         {!loading&&!dbError&&!adminOpen&&page==="profile"&&<ProfilePage author={author} novels={novels} onToWorks={()=>nav("home")} site={site} onSendMessage={addMessage}/>}
