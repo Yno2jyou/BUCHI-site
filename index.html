@@ -1498,11 +1498,19 @@ function Styles({site, lightMode}){
     .wmap-radar-axis-label{font-family:var(--body);font-size:11px;letter-spacing:.06em;fill:var(--txt2)}
 
     .wmap-flow-wrap{display:flex;flex-direction:column;gap:28px}
+    .wmap-flow-overview{width:100%;overflow:auto;border:1px solid var(--border);border-radius:2px;background:color-mix(in srgb,var(--bg) 94%,#fff 1%);padding:8px}
+    .wmap-flow-svg{display:block;min-width:640px}
+    .wmap-flow-edge{stroke:var(--border-hi);stroke-width:1.4}
+    .wmap-flow-edge-bg{fill:var(--bg);opacity:.9}
+    .wmap-flow-edge-label{font-family:var(--body);font-size:9px;fill:var(--txt3);letter-spacing:.02em}
+    .wmap-flow-node-q{fill:var(--surface);stroke:var(--border-hi);stroke-width:1.3;transition:stroke .2s,fill .2s}
+    .wmap-flow-node-q.current{stroke:var(--accent);fill:var(--accent-dim)}
+    .wmap-flow-node-result{fill:var(--accent-dim);stroke:var(--accent);stroke-width:1.6}
+    .wmap-flow-node-result.current{fill:var(--accent);fill-opacity:.3}
+    .wmap-flow-node-text{font-family:var(--body);font-size:10.5px;fill:var(--txt);letter-spacing:.02em;pointer-events:none}
     .wmap-flow-interactive{border:1px solid var(--border-hi);border-radius:3px;padding:32px 30px;background:color-mix(in srgb,var(--bg) 92%,#888 8%);min-height:160px;display:flex;align-items:center}
     .wmap-flow-question{width:100%}
     .wmap-flow-question-text{font-family:var(--serif);font-size:18px;font-weight:300;color:var(--txt);letter-spacing:.06em;line-height:1.7;margin-bottom:22px}
-    .wmap-flow-back-btn{background:none;border:none;cursor:pointer;font-family:var(--body);font-size:11px;letter-spacing:.1em;color:var(--txt3);padding:0;margin-bottom:16px;transition:color .2s}
-    .wmap-flow-back-btn:hover{color:var(--accent)}
     .wmap-flow-options{display:flex;flex-direction:column;gap:10px}
     .wmap-flow-option-btn{background:none;border:1px solid var(--border-hi);color:var(--txt2);font-family:var(--body);font-size:13px;letter-spacing:.04em;padding:13px 18px;text-align:left;cursor:pointer;border-radius:2px;transition:all .2s}
     .wmap-flow-option-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
@@ -2267,30 +2275,59 @@ function FlowchartView({data, novelById, onOpenNovel}){
   const edges=data.edges||[];
   const startId = nodes.length>0 ? nodes[0].id : null;
   const [currentId,setCurrentId]=useState(startId);
-  const [history,setHistory]=useState([]); // 「戻る」用に辿った経路を記録
-  useEffect(()=>{ setCurrentId(startId); setHistory([]); }, [startId]);
+  useEffect(()=>{ setCurrentId(startId); }, [startId]);
 
   const byId = useMemo(()=>Object.fromEntries(nodes.map(n=>[n.id,n])), [nodes]);
   const current = byId[currentId];
   const outgoing = useMemo(()=>edges.filter(e=>e.fromId===currentId), [edges, currentId]);
+  const W=900, H=560;
 
   if(nodes.length===0){
     return <div className="wmap-empty">フローチャートがまだ作られていません。管理パネルで質問・結果ノードを追加してください。</div>;
   }
 
-  const restart = () => { setCurrentId(startId); setHistory([]); };
-  const choose = (toId) => { setHistory(h=>[...h, currentId]); setCurrentId(toId); };
-  const goBack = () => {
-    if(history.length===0) return;
-    const prev=[...history];
-    const last=prev.pop();
-    setHistory(prev);
-    setCurrentId(last);
-  };
+  const restart = () => setCurrentId(startId);
 
   return (
     <div className="wmap-flow-wrap">
-      {/* 答えの先が見えてしまわないよう、図の全体像は表示せず、今の質問だけを見せる */}
+      <div className="wmap-flow-overview" style={{display:"none"}}>
+        <svg className="wmap-flow-svg" viewBox={`0 0 ${W} ${H}`} width="100%">
+          {edges.map(e=>{
+            const a=byId[e.fromId], b=byId[e.toId];
+            if(!a||!b) return null;
+            const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
+            const mx=(x1+x2)/2, my=(y1+y2)/2;
+            const dim = currentId!==e.fromId;
+            return (
+              <g key={e.id} opacity={dim?0.28:1}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} className="wmap-flow-edge"/>
+                {e.label && <>
+                  <rect x={mx-32} y={my-9} width="64" height="16" className="wmap-flow-edge-bg" rx="2"/>
+                  <text x={mx} y={my+3} className="wmap-flow-edge-label" textAnchor="middle">{e.label}</text>
+                </>}
+              </g>
+            );
+          })}
+          {nodes.map(n=>{
+            const isResult=n.kind==="result";
+            const isCurrent=n.id===currentId;
+            const novel = isResult ? novelById[n.novelId] : null;
+            return (
+              <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor: isResult&&novel ? "pointer":"default"}}
+                onClick={()=> isResult && novel && onOpenNovel && onOpenNovel(n.novelId)}>
+                {isResult
+                  ? <circle cx={n.x} cy={n.y} r="46" className={`wmap-flow-node-result ${isCurrent?"current":""}`}/>
+                  : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
+                }
+                <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
+                  {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
       <div className="wmap-flow-interactive">
         {!current ? (
           <div className="wmap-empty">開始ノードが見つかりません。</div>
@@ -2306,13 +2343,12 @@ function FlowchartView({data, novelById, onOpenNovel}){
           </div>
         ) : (
           <div className="wmap-flow-question">
-            {history.length>0 && <button className="wmap-flow-back-btn" onClick={goBack}>← 一つ前の質問に戻る</button>}
             <div className="wmap-flow-question-text">{current.text}</div>
             <div className="wmap-flow-options">
               {outgoing.length===0
                 ? <div className="wmap-empty" style={{padding:"24px 0"}}>この質問から先の分岐がまだ設定されていません。</div>
                 : outgoing.map(e=>(
-                  <button key={e.id} className="wmap-flow-option-btn" onClick={()=>choose(e.toId)}>
+                  <button key={e.id} className="wmap-flow-option-btn" onClick={()=>setCurrentId(e.toId)}>
                     {e.label || "次へ"} →
                   </button>
                 ))
@@ -3824,8 +3860,6 @@ function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDel
   const [dragging,setDragging]=useState(null);
   const byId=useMemo(()=>Object.fromEntries(nodes.map(n=>[n.id,n])), [nodes]);
   const novelById=useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
-  // 同じ2点（から・へ）を結ぶ矢印が複数ある場合、重ならないよう枝分かれさせるための並び順を割り当てる
-  const edgeRender=useMemo(()=>layoutFlowEdges(edges), [edges]);
 
   const canvasW=Math.max(900, ...nodes.map(n=>(n.x??100)+170), 900);
   const canvasH=Math.max(520, ...nodes.map(n=>(n.y??100)+170), 520);
@@ -3872,7 +3906,7 @@ function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDel
 
   return(
     <div>
-      <div className="wmap-admin-hint">質問ノード（四角）と結果ノード（円）をドラッグで配置し、下の「分岐を追加」で質問から次の質問・結果へ矢印をつなげます。最初に追加したノードが開始地点になります。同じ2つのノードを結ぶ分岐が複数ある場合（例：「はい」「いいえ」）は、線が自動的に分かれて表示されます。</div>
+      <div className="wmap-admin-hint">質問ノード（四角）と結果ノード（円）をドラッグで配置し、下の「分岐を追加」で質問から次の質問・結果へ矢印をつなげます。最初に追加したノードが開始地点になります。</div>
       <div className="form-row">
         <div className="form-group"><label className="form-label">セクションタイトル</label><BufferedInput className="form-input" value={data.title||""} onCommit={v=>onUpdate({title:v})}/></div>
         <div className="form-group"><label className="form-label">補足説明</label><BufferedInput className="form-input" value={data.desc||""} onCommit={v=>onUpdate({desc:v})}/></div>
@@ -3892,17 +3926,17 @@ function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDel
           <div className="wmap-flow-editor-viewport">
             <div className="wmap-flow-editor-stage" ref={stageRef} style={{width:canvasW,height:canvasH}}>
               <svg className="wmap-flow-editor-svg" width={canvasW} height={canvasH}>
-                {edgeRender.map(r=>{
-                  const e=r.edge;
+                {edges.map(e=>{
                   const a=byId[e.fromId], b=byId[e.toId];
                   if(!a||!b) return null;
                   const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
-                  const path=curvedEdgePath(x1,y1,x2,y2,r.offset,50,9);
+                  const geo=arrowGeometry(x1,y1,x2,y2,"end",50,9);
+                  const mx=(x1+x2)/2, my=(y1+y2)/2;
                   return(
                     <g key={e.id}>
-                      <path d={path.d} stroke="var(--accent)" strokeWidth="1.5" opacity="0.65" fill="none"/>
-                      {path.endArrowPoints && <polygon points={path.endArrowPoints} fill="var(--accent)" opacity="0.85"/>}
-                      {e.label && <text x={path.labelX} y={path.labelY} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{e.label}</text>}
+                      <line x1={geo.lx1} y1={geo.ly1} x2={geo.lx2} y2={geo.ly2} stroke="var(--accent)" strokeWidth="1.5" opacity="0.65"/>
+                      {geo.endArrowPoints && <polygon points={geo.endArrowPoints} fill="var(--accent)" opacity="0.85"/>}
+                      {e.label && <text x={mx} y={my-6} fontSize="10" fill="var(--txt2)" textAnchor="middle" fontFamily="var(--body)">{e.label}</text>}
                     </g>
                   );
                 })}
