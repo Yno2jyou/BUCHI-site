@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#07070f"/>
 <title>淵</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -708,6 +709,11 @@ function arrowGeometry(x1,y1,x2,y2,arrowType,nodeRadius=24,arrowSize=9){
 function Styles({site, lightMode}){
   const accent=site.theme?.accent||"#c8a86a";
   const bg=lightMode?"#f5f0e8":(site.theme?.bg||"#07070f");
+  React.useEffect(()=>{
+    let el=document.querySelector('meta[name="theme-color"]');
+    if(!el){el=document.createElement('meta');el.name='theme-color';document.head.appendChild(el);}
+    el.content=bg;
+  },[bg]);
   const font=site.theme?.font==="gothic"?"'Noto Sans JP',sans-serif":"'Cormorant Garamond','Noto Serif JP',serif";
   const txt   = lightMode?"#1a1814":"#e2ddd4";
   const txt2  = lightMode?"#5c5650":"#8c8578";
