@@ -1479,7 +1479,7 @@ function Styles({site, lightMode}){
     .wmap-quadrant-svg{width:100%;height:auto;overflow:visible}
     .wmap-axis-line{stroke:var(--border-hi);stroke-width:1;stroke-dasharray:3 4}
     .wmap-axis-box{fill:none;stroke:var(--border);stroke-width:1}
-    .wmap-axis-label{font-family:var(--body);font-size:11px;letter-spacing:.1em;fill:var(--txt3)}
+    .wmap-axis-label{font-family:var(--body);font-size:11px;letter-spacing:.1em;fill:var(--txt2)}
     .wmap-point-g{cursor:pointer}
     .wmap-point-dot{stroke:var(--bg);stroke-width:2;transition:r .15s}
     .wmap-point-tag-bg{fill:var(--bg);stroke:var(--border-hi);stroke-width:1}
@@ -2290,7 +2290,7 @@ function FlowchartView({data, novelById, onOpenNovel}){
 
   return (
     <div className="wmap-flow-wrap">
-      <div className="wmap-flow-overview" style={{display:"none"}}>
+      <div className="wmap-flow-overview">
         <svg className="wmap-flow-svg" viewBox={`0 0 ${W} ${H}`} width="100%">
           {edges.map(e=>{
             const a=byId[e.fromId], b=byId[e.toId];
@@ -2313,15 +2313,16 @@ function FlowchartView({data, novelById, onOpenNovel}){
             const isCurrent=n.id===currentId;
             const novel = isResult ? novelById[n.novelId] : null;
             return (
-              <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor: isResult&&novel ? "pointer":"default"}}
-                onClick={()=> isResult && novel && onOpenNovel && onOpenNovel(n.novelId)}>
+              <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor:"default"}}>
                 {isResult
-                  ? <circle cx={n.x} cy={n.y} r="46" className={`wmap-flow-node-result ${isCurrent?"current":""}`}/>
+                  ? <circle cx={n.x} cy={n.y} r="46" className={`wmap-flow-node-result ${isCurrent?"current":""}`} style={{fill:"var(--surface)",fillOpacity:1}}/>
                   : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
                 }
-                <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
-                  {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
-                </text>
+                {!isResult && (
+                  <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
+                    {n.text||"質問"}
+                  </text>
+                )}
               </g>
             );
           })}
