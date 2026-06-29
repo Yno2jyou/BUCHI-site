@@ -1498,8 +1498,14 @@ function Styles({site, lightMode}){
     .wmap-radar-axis-label{font-family:var(--body);font-size:11px;letter-spacing:.06em;fill:var(--txt2)}
 
     .wmap-flow-wrap{display:flex;flex-direction:column;gap:28px}
-    .wmap-flow-overview{width:100%;overflow:auto;border:1px solid var(--border);border-radius:2px;background:color-mix(in srgb,var(--bg) 94%,#fff 1%);padding:8px}
-    .wmap-flow-svg{display:block;min-width:640px}
+    .wmap-flow-overview-shell{position:relative;width:100%}
+    .wmap-flow-overview{width:100%;height:420px;overflow:hidden;border:1px solid var(--border);border-radius:2px;background:color-mix(in srgb,var(--bg) 94%,#fff 1%);padding:8px;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
+    .wmap-flow-overview:active{cursor:grabbing}
+    .wmap-flow-svg{display:block;width:100%;height:100%}
+    .wmap-flow-zoom-controls{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;z-index:2}
+    .wmap-flow-zoom-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border-hi);background:color-mix(in srgb,var(--bg) 80%,#000 5%);backdrop-filter:blur(4px);color:var(--txt2);font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;font-family:var(--body)}
+    .wmap-flow-zoom-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .wmap-flow-zoom-btn.wmap-flow-zoom-reset{font-size:13px}
     .wmap-flow-edge{stroke:var(--border-hi);stroke-width:1.4}
     .wmap-flow-edge-bg{fill:var(--bg);opacity:.9}
     .wmap-flow-edge-label{font-family:var(--body);font-size:9px;fill:var(--txt3);letter-spacing:.02em}
@@ -1605,6 +1611,8 @@ function Styles({site, lightMode}){
       .wmap-title{font-size:24px}
       .wmap-flow-interactive{padding:24px 18px}
       .wmap-flow-question-text{font-size:16px}
+      .wmap-flow-overview{height:320px}
+      .wmap-flow-zoom-btn{width:38px;height:38px;font-size:18px}
       .wmap-quad-editor-canvas{height:320px}
       .wmap-flow-editor-viewport{height:340px}
       .wmap-value-table{font-size:11px;display:block;overflow-x:auto;white-space:nowrap}
@@ -2271,6 +2279,162 @@ function RadarChart({data, novelById, onOpenNovel}){
 }
 
 // ───────── フローチャート（閲覧用・質問に沿って進む） ─────────
+// ピンチズーム/パン可能な全体マップビューア
+// - タッチ：1指ドラッグでパン、2指ピンチでズーム
+// - マウス：ホイールでズーム、ドラッグでパン
+// - ボタン：＋/－/リセット
+function ZoomableMap({children, vx, vy, vw, vh}){
+  const wrapRef = useRef(null);
+  const [tf, setTf] = useState({scale:1, x:0, y:0}); // x,y はSVG座標系での平行移動
+  const dragRef = useRef(null); // {mode:'pan'|'pinch', ...}
+  const MIN_SCALE=0.5, MAX_SCALE=6;
+
+  const clamp = (s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+  // クライアント座標 → SVGビューポート座標（ベースのviewBox基準）
+  const clientToSvgBase = useCallback((clientX, clientY) => {
+    const el = wrapRef.current;
+    if(!el) return {x:0,y:0};
+    const rect = el.getBoundingClientRect();
+    const px = (clientX - rect.left) / rect.width;
+    const py = (clientY - rect.top) / rect.height;
+    return { x: vx + px*vw, y: vy + py*vh };
+  }, [vx,vy,vw,vh]);
+
+  const zoomAt = useCallback((clientX, clientY, factor) => {
+    setTf(prev=>{
+      const newScale = clamp(prev.scale*factor);
+      if(newScale===prev.scale) return prev;
+      const base = clientToSvgBase(clientX, clientY);
+      const ratio = newScale/prev.scale;
+      const nx = base.x - (base.x - prev.x)*ratio;
+      const ny = base.y - (base.y - prev.y)*ratio;
+      return { scale:newScale, x:nx, y:ny };
+    });
+  }, [clientToSvgBase]);
+
+  const zoomButton = (factor) => {
+    const el = wrapRef.current;
+    if(!el) return;
+    const rect = el.getBoundingClientRect();
+    zoomAt(rect.left+rect.width/2, rect.top+rect.height/2, factor);
+  };
+
+  const reset = () => setTf({scale:1, x:0, y:0});
+
+  // ── マウス：ホイールズーム ──
+  const onWheel = useCallback((ev)=>{
+    ev.preventDefault();
+    const factor = ev.deltaY<0 ? 1.15 : 1/1.15;
+    zoomAt(ev.clientX, ev.clientY, factor);
+  }, [zoomAt]);
+
+  // ── マウス：ドラッグパン ──
+  const onMouseDown = (ev) => {
+    if(ev.button!==0) return;
+    dragRef.current = { mode:"pan", startX:ev.clientX, startY:ev.clientY, origX:tf.x, origY:tf.y };
+  };
+  useEffect(()=>{
+    const onMove = (ev) => {
+      const d = dragRef.current;
+      if(!d || d.mode!=="pan") return;
+      const el = wrapRef.current;
+      if(!el) return;
+      const rect = el.getBoundingClientRect();
+      const dxPx = ev.clientX - d.startX, dyPx = ev.clientY - d.startY;
+      const dxSvg = dxPx * (vw/rect.width) * tf.scale;
+      const dySvg = dyPx * (vh/rect.height) * tf.scale;
+      setTf(prev=>({...prev, x:d.origX+dxSvg, y:d.origY+dySvg}));
+    };
+    const onUp = () => { if(dragRef.current?.mode==="pan") dragRef.current=null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return ()=>{ window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [tf.scale, vw, vh]);
+
+  // ── タッチ：1指パン／2指ピンチズーム ──
+  const touchDist = (t0,t1) => Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
+  const touchMid = (t0,t1) => ({x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2});
+
+  const onTouchStart = (ev) => {
+    if(ev.touches.length===1){
+      const t=ev.touches[0];
+      dragRef.current = { mode:"pan", startX:t.clientX, startY:t.clientY, origX:tf.x, origY:tf.y };
+    } else if(ev.touches.length===2){
+      const t0=ev.touches[0], t1=ev.touches[1];
+      const mid = touchMid(t0,t1);
+      dragRef.current = {
+        mode:"pinch",
+        startDist: touchDist(t0,t1),
+        startScale: tf.scale,
+        midSvgBase: clientToSvgBase(mid.x, mid.y),
+        origX: tf.x, origY: tf.y,
+      };
+    }
+  };
+  const onTouchMove = (ev) => {
+    const d = dragRef.current;
+    if(!d) return;
+    if(ev.touches.length===1 && d.mode==="pan"){
+      ev.preventDefault();
+      const t=ev.touches[0];
+      const el = wrapRef.current;
+      if(!el) return;
+      const rect = el.getBoundingClientRect();
+      const dxPx = t.clientX - d.startX, dyPx = t.clientY - d.startY;
+      const dxSvg = dxPx * (vw/rect.width) * tf.scale;
+      const dySvg = dyPx * (vh/rect.height) * tf.scale;
+      setTf(prev=>({...prev, x:d.origX+dxSvg, y:d.origY+dySvg}));
+    } else if(ev.touches.length===2 && d.mode==="pinch"){
+      ev.preventDefault();
+      const t0=ev.touches[0], t1=ev.touches[1];
+      const newDist = touchDist(t0,t1);
+      const factor = newDist / (d.startDist||1);
+      const newScale = clamp(d.startScale*factor);
+      const ratio = newScale/d.startScale;
+      const base = d.midSvgBase;
+      const nx = base.x - (base.x - d.origX)*ratio;
+      const ny = base.y - (base.y - d.origY)*ratio;
+      setTf({ scale:newScale, x:nx, y:ny });
+    }
+  };
+  const onTouchEnd = (ev) => {
+    if(ev.touches.length===0) dragRef.current=null;
+    else if(ev.touches.length===1){
+      const t=ev.touches[0];
+      dragRef.current = { mode:"pan", startX:t.clientX, startY:t.clientY, origX:tf.x, origY:tf.y };
+    }
+  };
+
+  const groupTransform = `translate(${tf.x} ${tf.y}) scale(${tf.scale})`;
+
+  return (
+    <div className="wmap-flow-overview-shell">
+      <div
+        className="wmap-flow-overview"
+        ref={wrapRef}
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      >
+        <svg className="wmap-flow-svg" viewBox={`${vx} ${vy} ${vw} ${vh}`} width="100%">
+          <g transform={groupTransform}>
+            {children}
+          </g>
+        </svg>
+      </div>
+      <div className="wmap-flow-zoom-controls">
+        <button type="button" className="wmap-flow-zoom-btn" onClick={()=>zoomButton(1/1.4)} aria-label="縮小">−</button>
+        <button type="button" className="wmap-flow-zoom-btn wmap-flow-zoom-reset" onClick={reset} aria-label="リセット">⤢</button>
+        <button type="button" className="wmap-flow-zoom-btn" onClick={()=>zoomButton(1.4)} aria-label="拡大">＋</button>
+      </div>
+    </div>
+  );
+}
+
 function FlowchartView({data, novelById, onOpenNovel}){
   const nodes=data.nodes||[];
   const edges=data.edges||[];
@@ -2292,7 +2456,6 @@ function FlowchartView({data, novelById, onOpenNovel}){
   });
   if(!isFinite(minX)){minX=0;minY=0;maxX=900;maxY=560;}
   const vx=minX-pad, vy=minY-pad, vw=maxX-minX+pad*2, vh=maxY-minY+pad*2;
-  const W=vw, H=vh;
 
   if(nodes.length===0){
     return <div className="wmap-empty">フローチャートがまだ作られていません。管理パネルで質問・結果ノードを追加してください。</div>;
@@ -2332,47 +2495,45 @@ function FlowchartView({data, novelById, onOpenNovel}){
         )}
       </div>
 
-      <div className="wmap-flow-overview">
-        <svg className="wmap-flow-svg" viewBox={`${vx} ${vy} ${vw} ${vh}`} width="100%">
-          {edges.map(e=>{
-            const a=byId[e.fromId], b=byId[e.toId];
-            if(!a||!b) return null;
-            const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
-            const mx=(x1+x2)/2, my=(y1+y2)/2;
-            const dim = currentId!==e.fromId;
-            return (
-              <g key={e.id} opacity={dim?0.28:1}>
-                <line x1={x1} y1={y1} x2={x2} y2={y2} className="wmap-flow-edge"/>
-                {e.label && <>
-                  <rect x={mx-32} y={my-9} width="64" height="16" className="wmap-flow-edge-bg" rx="2"/>
-                  <text x={mx} y={my+3} className="wmap-flow-edge-label" textAnchor="middle">{e.label}</text>
-                </>}
-              </g>
-            );
-          })}
-          {nodes.map(n=>{
-            const isResult=n.kind==="result";
-            const isCurrent=n.id===currentId;
-            const isRevealed=isResult && isCurrent; // おすすめ確定時だけ開示
-            const novel = isResult ? novelById[n.novelId] : null;
-            return (
-              <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor:"default"}}>
-                {isResult
-                  ? <circle cx={n.x} cy={n.y} r="46"
-                      className={`wmap-flow-node-result ${isCurrent?"current":""}`}
-                      style={isRevealed ? {} : {fill:"var(--surface)",fillOpacity:1}}/>
-                  : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
-                }
-                {(!isResult || isRevealed) && (
-                  <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
-                    {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+      <ZoomableMap vx={vx} vy={vy} vw={vw} vh={vh}>
+        {edges.map(e=>{
+          const a=byId[e.fromId], b=byId[e.toId];
+          if(!a||!b) return null;
+          const x1=a.x??100, y1=a.y??100, x2=b.x??100, y2=b.y??100;
+          const mx=(x1+x2)/2, my=(y1+y2)/2;
+          const dim = currentId!==e.fromId;
+          return (
+            <g key={e.id} opacity={dim?0.28:1}>
+              <line x1={x1} y1={y1} x2={x2} y2={y2} className="wmap-flow-edge"/>
+              {e.label && <>
+                <rect x={mx-32} y={my-9} width="64" height="16" className="wmap-flow-edge-bg" rx="2"/>
+                <text x={mx} y={my+3} className="wmap-flow-edge-label" textAnchor="middle">{e.label}</text>
+              </>}
+            </g>
+          );
+        })}
+        {nodes.map(n=>{
+          const isResult=n.kind==="result";
+          const isCurrent=n.id===currentId;
+          const isRevealed=isResult && isCurrent; // おすすめ確定時だけ開示
+          const novel = isResult ? novelById[n.novelId] : null;
+          return (
+            <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor:"default"}}>
+              {isResult
+                ? <circle cx={n.x} cy={n.y} r="46"
+                    className={`wmap-flow-node-result ${isCurrent?"current":""}`}
+                    style={isRevealed ? {} : {fill:"var(--surface)",fillOpacity:1}}/>
+                : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
+              }
+              {(!isResult || isRevealed) && (
+                <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
+                  {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </ZoomableMap>
 
     </div>
   );
