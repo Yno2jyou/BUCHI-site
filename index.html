@@ -2280,7 +2280,18 @@ function FlowchartView({data, novelById, onOpenNovel}){
   const byId = useMemo(()=>Object.fromEntries(nodes.map(n=>[n.id,n])), [nodes]);
   const current = byId[currentId];
   const outgoing = useMemo(()=>edges.filter(e=>e.fromId===currentId), [edges, currentId]);
-  const W=900, H=560;
+  // ノード座標の実範囲からviewBoxを動的計算
+  const pad=60;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  nodes.forEach(n=>{
+    const x=n.x??100, y=n.y??100;
+    const hw=n.kind==="result"?46:58, hh=n.kind==="result"?46:30;
+    minX=Math.min(minX,x-hw); maxX=Math.max(maxX,x+hw);
+    minY=Math.min(minY,y-hh); maxY=Math.max(maxY,y+hh);
+  });
+  if(!isFinite(minX)){minX=0;minY=0;maxX=900;maxY=560;}
+  const vx=minX-pad, vy=minY-pad, vw=maxX-minX+pad*2, vh=maxY-minY+pad*2;
+  const W=vw, H=vh;
 
   if(nodes.length===0){
     return <div className="wmap-empty">フローチャートがまだ作られていません。管理パネルで質問・結果ノードを追加してください。</div>;
@@ -2291,7 +2302,7 @@ function FlowchartView({data, novelById, onOpenNovel}){
   return (
     <div className="wmap-flow-wrap">
       <div className="wmap-flow-overview">
-        <svg className="wmap-flow-svg" viewBox={`0 0 ${W} ${H}`} width="100%">
+        <svg className="wmap-flow-svg" viewBox={`${vx} ${vy} ${vw} ${vh}`} width="100%">
           {edges.map(e=>{
             const a=byId[e.fromId], b=byId[e.toId];
             if(!a||!b) return null;
