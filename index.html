@@ -3442,8 +3442,8 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
 
   // 登場人物が画面外にこぼれず、かつ多い場合はスクロールで辿れるよう、
   // 実際の配置座標に応じてキャンバス自体のサイズを動的に広げる
-  const canvasW = Math.max(900, ...characters.map(c=>(c.x??100)+170), 900);
-  const canvasH = Math.max(560, ...characters.map(c=>(c.y??100)+170), 560);
+  const canvasW = Math.max(900, ...Object.values(byId).map(c=>(c.x??100)+170), 900);
+  const canvasH = Math.max(560, ...Object.values(byId).map(c=>(c.y??100)+170), 560);
 
   // Firestoreから確定した座標がpropsに反映されたら、ローカルの仮置き座標は不要になるので消す
   useEffect(()=>{
@@ -3561,7 +3561,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
               );
             })}
           </svg>
-          {characters.map(c=>(
+          {characters.map(c0=>{ const c = byId[c0.id]||c0; return (
             <div key={c.id}
               className={`char-editor-node ${dragging===c.id?"dragging":""} ${selectedCharId===c.id?"selected":""}`}
               style={{left:c.x??100, top:c.y??100}}
@@ -3571,7 +3571,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
               <div className="char-editor-node-circle" style={{background:c.color||"#c8a86a"}}>{(c.name||"?").charAt(0)}</div>
               <div className="char-editor-node-name">{c.name||"（無名）"}</div>
             </div>
-          ))}
+          );})}
         </div>
       </div>
 
