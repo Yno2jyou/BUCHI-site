@@ -3448,6 +3448,10 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
   // （毎mousemoveごとに保存すると、非同期の書き込みが追い越し合って古い座標で上書きされ、
   //   再読み込みすると変更前の位置に戻ってしまう不具合の原因だったため）
   const [localPos, setLocalPos] = useState({});
+  // 相関図エディタ専用の保存状態インジケーター。これまでは保存中かどうかが画面上に
+  // まったく表示されず、書き込みが完了する前にユーザーがページを再読み込みしてしまい、
+  // 通信中の保存がキャンセルされて変更が失われる、という事態が起きていた可能性が高いため追加。
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
   const byId = useMemo(()=>{
     const map = Object.fromEntries(characters.map(c=>[c.id,c]));
     Object.keys(localPos).forEach(id=>{ if(map[id]) map[id] = {...map[id], x:localPos[id].x, y:localPos[id].y}; });
@@ -3506,8 +3510,12 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     const end = () => {
       const d = dragRef.current;
       if(d && d.lastX!=null){
-        // ドラッグ終了時の最終座標だけをFirestoreへ一度だけ保存する
-        onMoveChar(d.charId, d.lastX, d.lastY);
+        // ドラッグ終了時の最終座標だけをFirestoreへ一度だけ保存する。
+        // 完了を待ってから状態表示を更新し、保存中に再読み込みされても分かるようにする。
+        setSaveStatus("saving");
+        Promise.resolve(onMoveChar(d.charId, d.lastX, d.lastY))
+          .then(()=>{ setSaveStatus("saved"); setTimeout(()=>setSaveStatus(s=>s==="saved"?"idle":s), 2000); })
+          .catch(()=>{ setSaveStatus("error"); });
       }
       dragRef.current=null; setDragging(null);
     };
@@ -3522,6 +3530,15 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
       window.removeEventListener("touchend", end);
     };
   },[dragging, onMoveChar]);
+
+  // 保存（Firestoreへの書き込み）が完了する前にページを閉じる／再読み込みされると、
+  // 通信中のリクエストがキャンセルされ変更が失われるため、その間は離脱確認を出す。
+  useEffect(()=>{
+    if(saveStatus!=="saving") return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; return ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  },[saveStatus]);
 
   // 編集キャンバス上でのグループの背景枠（メンバーの現在位置を囲む矩形）を計算
   const groupBoxes = useMemo(()=>groups.map(g=>{
@@ -3549,6 +3566,13 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
   return(
     <div>
       <div className="char-editor-hint">人物アイコンをドラッグして自由に配置できます。並べた位置関係はそのまま保たれた状態で、読者側では常に画面中央に大きく表示されます。登場人物が多い場合はキャンバスが自動的に広がるので、枠内をスクロールして配置してください。下の「関係を追加」で人物同士を線で結び（矢印にも変更できます）、「グループを追加」で所属先（クラス・家族など）の括りを作れます。</div>
+      {saveStatus!=="idle" && (
+        <div style={{fontSize:12, marginBottom:10, color: saveStatus==="error"?"#f87171":"var(--accent)"}}>
+          {saveStatus==="saving" && "⌛ 位置を保存中…（保存が終わるまでページを再読み込みしないでください）"}
+          {saveStatus==="saved" && "✓ 位置を保存しました"}
+          {saveStatus==="error" && "⚠ 位置の保存に失敗しました。もう一度動かしてみてください"}
+        </div>
+      )}
       <div className="char-editor-viewport">
         <div className="char-editor-stage" ref={stageRef} style={{width:canvasW, height:canvasH}}>
           <svg className="char-editor-svg" width={canvasW} height={canvasH}>
