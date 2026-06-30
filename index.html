@@ -87,6 +87,12 @@ const DEFAULT_WORKS_MAP = {
     nodes:[], // [{id, kind:'question'|'result', text, x, y, novelId?}]
     edges:[], // [{id, fromId, toId, label}]
   },
+  // ── ランキング（任意テーマで作品を順位づけ） ──
+  ranking:{
+    title:"作品ランキング",
+    desc:"あるテーマに沿って、作品を順位づけしてみました。",
+    items:[], // [{id, novelId, reason}] 配列の順番がそのまま順位（先頭が1位）
+  },
 };
 const DEFAULT_NOVELS = [
   { id:"n1", title:"深夜の鏡", subtitle:"闇の中の自己探求", author:"蒼井 玲", genre:"心理・文学",
@@ -300,6 +306,7 @@ function useStore() {
           quadrant: { ...DEFAULT_WORKS_MAP.quadrant, ...(d.quadrant||{}) },
           radar: { ...DEFAULT_WORKS_MAP.radar, ...(d.radar||{}) },
           flowchart: { ...DEFAULT_WORKS_MAP.flowchart, ...(d.flowchart||{}) },
+          ranking: { ...DEFAULT_WORKS_MAP.ranking, ...(d.ranking||{}) },
         });
       } else {
         setWorksMapLocal(DEFAULT_WORKS_MAP);
@@ -668,6 +675,39 @@ function useStore() {
     await updateFlowchart({ edges });
   }, [worksMap.flowchart, updateFlowchart]);
 
+  const updateRanking = useCallback(async (patch) => {
+    const next = typeof patch==="function" ? patch(worksMap.ranking) : { ...worksMap.ranking, ...patch };
+    await saveWorksMapSection("ranking", next);
+  }, [worksMap.ranking, saveWorksMapSection]);
+
+  // 作品をランキング末尾に追加する（理由欄は空で開始）。同一作品の重複追加は不可。
+  const addRankingItem = useCallback(async (novelId) => {
+    const items = worksMap.ranking.items||[];
+    if (items.some(it=>it.novelId===novelId)) return;
+    const item = { id:uid(), novelId, reason:"" };
+    await updateRanking({ items:[...items, item] });
+  }, [worksMap.ranking, updateRanking]);
+
+  const removeRankingItem = useCallback(async (itemId) => {
+    const items = (worksMap.ranking.items||[]).filter(it=>it.id!==itemId);
+    await updateRanking({ items });
+  }, [worksMap.ranking, updateRanking]);
+
+  const setRankingReason = useCallback(async (itemId, reason) => {
+    const items = (worksMap.ranking.items||[]).map(it=>it.id===itemId?{...it,reason}:it);
+    await updateRanking({ items });
+  }, [worksMap.ranking, updateRanking]);
+
+  // 配列内の順番＝順位なので、隣接スワップで順位を上下させる。
+  const moveRankingItem = useCallback(async (itemId, dir) => {
+    const items = [...(worksMap.ranking.items||[])];
+    const i = items.findIndex(it=>it.id===itemId);
+    const j = dir==="up" ? i-1 : i+1;
+    if (i<0 || j<0 || j>=items.length) return;
+    [items[i], items[j]] = [items[j], items[i]];
+    await updateRanking({ items });
+  }, [worksMap.ranking, updateRanking]);
+
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
     addMessage, deleteMessage, markRead,
     addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
@@ -678,7 +718,8 @@ function useStore() {
     motokoStories, updateMotokoStory, addMotokoStory, deleteMotokoStory,
     worksMap, updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
-    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge };
+    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
+    updateRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem };
 }
 
 // ═══════════════ HELPERS ═══════════════
@@ -1536,6 +1577,24 @@ function Styles({site, lightMode}){
     .wmap-flow-result-sub{font-size:12px;color:var(--txt3);font-style:italic;margin-bottom:24px}
     .wmap-flow-result-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 
+    .wmap-rank-wrap{display:flex;flex-direction:column;gap:2px}
+    .wmap-rank-row{display:flex;align-items:flex-start;gap:18px;padding:18px 4px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .2s}
+    .wmap-rank-row:hover{background:color-mix(in srgb,var(--bg) 92%,#fff 2%)}
+    .wmap-rank-row:last-child{border-bottom:none}
+    .wmap-rank-num{font-family:var(--serif);font-size:26px;font-weight:300;color:var(--accent);width:40px;flex-shrink:0;text-align:center}
+    .wmap-rank-body{flex:1;min-width:0}
+    .wmap-rank-title{font-family:var(--serif);font-size:17px;font-weight:400;letter-spacing:.04em;margin-bottom:4px}
+    .wmap-rank-sub{font-size:11px;color:var(--txt3);font-style:italic;margin-bottom:8px}
+    .wmap-rank-reason{font-size:12.5px;color:var(--txt2);line-height:1.85}
+
+    .wmap-rank-edit-row{padding:14px 0;border-bottom:1px solid var(--border)}
+    .wmap-rank-edit-row:last-child{border-bottom:none}
+    .wmap-rank-edit-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .wmap-rank-edit-num{font-family:var(--serif);font-size:16px;color:var(--accent);width:24px;flex-shrink:0;text-align:center}
+    .wmap-rank-edit-title{flex:1;font-size:13px;color:var(--txt)}
+    .wmap-rank-edit-actions{display:flex;gap:4px;flex-shrink:0}
+    .wmap-rank-edit-actions .icon-btn:disabled{opacity:.3;cursor:default}
+
     /* ═══ 作品マップ（管理パネル：編集用） ═══ */
     .wmap-admin-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:28px;flex-wrap:wrap}
     .wmap-admin-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 4px;margin-right:28px;cursor:pointer;font-family:var(--body);font-size:11px;letter-spacing:.16em;color:var(--txt3);transition:all .2s}
@@ -2129,6 +2188,7 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
         <button className={`tensen-tab ${tab==="quadrant"?"active":""}`} onClick={()=>setTab("quadrant")}>四象限マップ</button>
         <button className={`tensen-tab ${tab==="radar"?"active":""}`} onClick={()=>setTab("radar")}>特徴レーダー</button>
         <button className={`tensen-tab ${tab==="flow"?"active":""}`} onClick={()=>setTab("flow")}>フローチャート</button>
+        <button className={`tensen-tab ${tab==="ranking"?"active":""}`} onClick={()=>setTab("ranking")}>ランキング</button>
       </div>
 
       {tab==="quadrant" && (
@@ -2158,6 +2218,16 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
             {worksMap.flowchart.desc && <div className="wmap-section-desc">{worksMap.flowchart.desc}</div>}
           </div>
           <FlowchartView data={worksMap.flowchart} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        </div>
+      )}
+
+      {tab==="ranking" && (
+        <div className="wmap-section fadein">
+          <div className="wmap-section-head">
+            <div className="wmap-section-title">{worksMap.ranking.title||"作品ランキング"}</div>
+            {worksMap.ranking.desc && <div className="wmap-section-desc">{worksMap.ranking.desc}</div>}
+          </div>
+          <RankingView data={worksMap.ranking} novelById={novelById} onOpenNovel={onOpenNovel}/>
         </div>
       )}
     </div>
@@ -2394,7 +2464,31 @@ function FlowchartView({data, novelById, onOpenNovel}){
   );
 }
 
-// ═══════════════ HOME ═══════════════
+// ───────── ランキング（閲覧用） ─────────
+function RankingView({data, novelById, onOpenNovel}){
+  const items=(data.items||[]).map(it=>({...it, novel:novelById[it.novelId]})).filter(it=>it.novel);
+
+  if(items.length===0){
+    return <div className="wmap-empty">まだランキングが作られていません。管理パネルの「作品マップ」から登録できます。</div>;
+  }
+
+  return (
+    <div className="wmap-rank-wrap">
+      {items.map((it,i)=>(
+        <div key={it.id} className="wmap-rank-row" onClick={()=>onOpenNovel&&onOpenNovel(it.novelId)}>
+          <div className="wmap-rank-num">{i+1}</div>
+          <div className="wmap-rank-body">
+            <div className="wmap-rank-title" style={{color:it.novel.accent||"var(--accent)"}}>{it.novel.title}</div>
+            {it.novel.subtitle && <div className="wmap-rank-sub">{it.novel.subtitle}</div>}
+            {it.reason && <div className="wmap-rank-reason">{it.reason}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
 function countChars(novel) {
   return (novel.chapters||[]).reduce((s,ch)=>s+(ch.content||"").replace(/\s/g,"").length, 0);
 }
@@ -3513,9 +3607,16 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
         // ドラッグ終了時の最終座標だけをFirestoreへ一度だけ保存する。
         // 完了を待ってから状態表示を更新し、保存中に再読み込みされても分かるようにする。
         setSaveStatus("saving");
+        let settled = false;
+        const timeoutId = setTimeout(()=>{
+          if(!settled) setSaveStatus("timeout"); // 8秒応答がなければネットワーク疑いを表示
+        }, 8000);
         Promise.resolve(onMoveChar(d.charId, d.lastX, d.lastY))
-          .then(()=>{ setSaveStatus("saved"); setTimeout(()=>setSaveStatus(s=>s==="saved"?"idle":s), 2000); })
-          .catch(()=>{ setSaveStatus("error"); });
+          .then(()=>{
+            settled = true; clearTimeout(timeoutId);
+            setSaveStatus("saved"); setTimeout(()=>setSaveStatus(s=>s==="saved"?"idle":s), 2000);
+          })
+          .catch(()=>{ settled = true; clearTimeout(timeoutId); setSaveStatus("error"); });
       }
       dragRef.current=null; setDragging(null);
     };
@@ -3534,7 +3635,7 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
   // 保存（Firestoreへの書き込み）が完了する前にページを閉じる／再読み込みされると、
   // 通信中のリクエストがキャンセルされ変更が失われるため、その間は離脱確認を出す。
   useEffect(()=>{
-    if(saveStatus!=="saving") return;
+    if(saveStatus!=="saving") return; // timeoutに切り替わったら離脱確認は不要（待っても無駄なため）
     const handler = (e) => { e.preventDefault(); e.returnValue = ""; return ""; };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
@@ -3567,10 +3668,11 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
     <div>
       <div className="char-editor-hint">人物アイコンをドラッグして自由に配置できます。並べた位置関係はそのまま保たれた状態で、読者側では常に画面中央に大きく表示されます。登場人物が多い場合はキャンバスが自動的に広がるので、枠内をスクロールして配置してください。下の「関係を追加」で人物同士を線で結び（矢印にも変更できます）、「グループを追加」で所属先（クラス・家族など）の括りを作れます。</div>
       {saveStatus!=="idle" && (
-        <div style={{fontSize:12, marginBottom:10, color: saveStatus==="error"?"#f87171":"var(--accent)"}}>
+        <div style={{fontSize:12, marginBottom:10, color: (saveStatus==="error"||saveStatus==="timeout")?"#f87171":"var(--accent)"}}>
           {saveStatus==="saving" && "⌛ 位置を保存中…（保存が終わるまでページを再読み込みしないでください）"}
           {saveStatus==="saved" && "✓ 位置を保存しました"}
           {saveStatus==="error" && "⚠ 位置の保存に失敗しました。もう一度動かしてみてください"}
+          {saveStatus==="timeout" && "⚠ サーバーから応答がありません。インターネット接続、またはFirestoreへの通信がブロックされていないかご確認ください（このまま待ち続けても保存されない可能性があります）"}
         </div>
       )}
       <div className="char-editor-viewport">
@@ -3686,21 +3788,23 @@ function CharacterGraphEditor({novel, selectedCharId, onSelectChar, onMoveChar, 
 // 各エディタは novels（投稿済み作品の一覧）を参照し、著者は項目（軸・質問・位置）を
 // 自由に記述・操作・配置できる。
 function WorksMapAdmin({store}){
-  const [tab,setTab]=useState("quadrant"); // quadrant | radar | flow
+  const [tab,setTab]=useState("quadrant"); // quadrant | radar | flow | ranking
   const {novels, worksMap,
     updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
     updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
+    updateRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem,
   } = store;
 
   return(
     <div>
       <div className="admin-title">作品マップ</div>
-      <div className="wmap-admin-hint">作品一覧ページの「🗺 作品マップ」から読者が見られる、3種類の可視化を編集できます。ここでの変更は保存後すぐに公開ページへ反映されます。</div>
+      <div className="wmap-admin-hint">作品一覧ページの「🗺 作品マップ」から読者が見られる、4種類の可視化を編集できます。ここでの変更は保存後すぐに公開ページへ反映されます。</div>
       <div className="wmap-admin-tabs">
         <button className={`wmap-admin-tab ${tab==="quadrant"?"active":""}`} onClick={()=>setTab("quadrant")}>四象限マップ</button>
         <button className={`wmap-admin-tab ${tab==="radar"?"active":""}`} onClick={()=>setTab("radar")}>特徴レーダー</button>
         <button className={`wmap-admin-tab ${tab==="flow"?"active":""}`} onClick={()=>setTab("flow")}>フローチャート</button>
+        <button className={`wmap-admin-tab ${tab==="ranking"?"active":""}`} onClick={()=>setTab("ranking")}>ランキング</button>
       </div>
       {tab==="quadrant" && (
         <QuadrantEditor
@@ -3720,6 +3824,13 @@ function WorksMapAdmin({store}){
           novels={novels} data={worksMap.flowchart}
           onUpdate={updateFlowchart} onAddNode={addFlowNode} onUpdateNode={updateFlowNode} onDeleteNode={deleteFlowNode}
           onAddEdge={addFlowEdge} onUpdateEdge={updateFlowEdge} onDeleteEdge={deleteFlowEdge}
+        />
+      )}
+      {tab==="ranking" && (
+        <RankingEditor
+          novels={novels} data={worksMap.ranking}
+          onUpdate={updateRanking} onAddItem={addRankingItem} onRemoveItem={removeRankingItem}
+          onSetReason={setRankingReason} onMoveItem={moveRankingItem}
         />
       )}
     </div>
@@ -4099,6 +4210,64 @@ function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDel
           }
         </div>
       )}
+    </div>
+  );
+}
+
+// ───────── ランキング エディタ ─────────
+function RankingEditor({novels, data, onUpdate, onAddItem, onRemoveItem, onSetReason, onMoveItem}){
+  const items=data.items||[];
+  const byId=useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
+  const usedIds=new Set(items.map(it=>it.novelId));
+  const [pickId,setPickId]=useState("");
+  const available=novels.filter(n=>!usedIds.has(n.id));
+
+  const handleAdd = () => {
+    if(!pickId) return;
+    onAddItem(pickId);
+    setPickId("");
+  };
+
+  return(
+    <div>
+      <div className="wmap-admin-hint">テーマを決めて、作品を順位づけしてください。並び順がそのまま順位（一番上が1位）になります。各作品の選出理由も書き添えられます。</div>
+      <div className="form-row">
+        <div className="form-group"><label className="form-label">ランキングテーマ（タイトル）</label><BufferedInput className="form-input" value={data.title||""} onCommit={v=>onUpdate({title:v})} placeholder="例：今読むべき一篇 ベスト5"/></div>
+        <div className="form-group"><label className="form-label">補足説明</label><BufferedInput className="form-input" value={data.desc||""} onCommit={v=>onUpdate({desc:v})}/></div>
+      </div>
+
+      <div className="wmap-admin-subhead">
+        <span className="form-label" style={{margin:0}}>ランクイン作品 ({items.length})</span>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+        <select className="form-input" style={{flex:1,minWidth:180}} value={pickId} onChange={e=>setPickId(e.target.value)}>
+          <option value="">作品を選択...</option>
+          {available.map(n=><option key={n.id} value={n.id}>{n.title}</option>)}
+        </select>
+        <button className="btn btn-primary" style={{padding:"7px 16px",fontSize:11}} onClick={handleAdd} disabled={!pickId}>＋ ランキングに追加</button>
+      </div>
+
+      {items.length===0
+        ? <div style={{padding:"16px 0",color:"var(--txt3)",fontSize:12}}>まだ作品が追加されていません</div>
+        : items.map((it,i)=>{
+          const novel=byId[it.novelId];
+          return (
+            <div key={it.id} className="wmap-rank-edit-row">
+              <div className="wmap-rank-edit-top">
+                <div className="wmap-rank-edit-num">{i+1}</div>
+                <div className="wmap-rank-edit-title">{novel ? novel.title : "（削除された作品）"}</div>
+                <div className="wmap-rank-edit-actions">
+                  <button className="icon-btn" onClick={()=>onMoveItem(it.id,"up")} disabled={i===0} title="順位を上げる">↑</button>
+                  <button className="icon-btn" onClick={()=>onMoveItem(it.id,"down")} disabled={i===items.length-1} title="順位を下げる">↓</button>
+                  <button className="icon-btn danger" onClick={()=>onRemoveItem(it.id)}>🗑</button>
+                </div>
+              </div>
+              <BufferedTextarea className="form-input" rows={2} value={it.reason||""}
+                onCommit={v=>onSetReason(it.id,v)} placeholder="選出理由を簡単に（任意）"/>
+            </div>
+          );
+        })
+      }
     </div>
   );
 }
