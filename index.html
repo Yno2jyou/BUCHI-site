@@ -87,12 +87,15 @@ const DEFAULT_WORKS_MAP = {
     nodes:[], // [{id, kind:'question'|'result', text, x, y, novelId?}]
     edges:[], // [{id, fromId, toId, label}]
   },
-  // ── ランキング（任意テーマで作品を順位づけ） ──
-  ranking:{
-    title:"作品ランキング",
-    desc:"あるテーマに沿って、作品を順位づけしてみました。",
-    items:[], // [{id, novelId, reason}] 配列の順番がそのまま順位（先頭が1位）
-  },
+  // ── ランキング（任意テーマで作品を順位づけ。テーマごとに複数作れる） ──
+  rankings:[
+    {
+      id:"rk1",
+      title:"作品ランキング",
+      desc:"あるテーマに沿って、作品を順位づけしてみました。",
+      items:[], // [{id, novelId, reason}] 配列の順番がそのまま順位（先頭が1位）
+    },
+  ],
 };
 const DEFAULT_NOVELS = [
   { id:"n1", title:"深夜の鏡", subtitle:"闇の中の自己探求", author:"蒼井 玲", genre:"心理・文学",
@@ -302,11 +305,21 @@ function useStore() {
     unsubs.push(db.collection("settings").doc("worksMap").onSnapshot(snap => {
       if (snap.exists) {
         const d = snap.data() || {};
+        // 旧バージョン（ranking: 単一オブジェクト）からの移行：
+        // rankings配列がまだ無く、旧ranking.itemsがあればそれを1件目として変換する。
+        let rankings = Array.isArray(d.rankings) ? d.rankings : null;
+        if (!rankings) {
+          if (d.ranking && (d.ranking.items||[]).length) {
+            rankings = [{ id: uid(), title: d.ranking.title||"作品ランキング", desc: d.ranking.desc||"", items: d.ranking.items||[] }];
+          } else {
+            rankings = DEFAULT_WORKS_MAP.rankings;
+          }
+        }
         setWorksMapLocal({
           quadrant: { ...DEFAULT_WORKS_MAP.quadrant, ...(d.quadrant||{}) },
           radar: { ...DEFAULT_WORKS_MAP.radar, ...(d.radar||{}) },
           flowchart: { ...DEFAULT_WORKS_MAP.flowchart, ...(d.flowchart||{}) },
-          ranking: { ...DEFAULT_WORKS_MAP.ranking, ...(d.ranking||{}) },
+          rankings,
         });
       } else {
         setWorksMapLocal(DEFAULT_WORKS_MAP);
@@ -675,38 +688,62 @@ function useStore() {
     await updateFlowchart({ edges });
   }, [worksMap.flowchart, updateFlowchart]);
 
-  const updateRanking = useCallback(async (patch) => {
-    const next = typeof patch==="function" ? patch(worksMap.ranking) : { ...worksMap.ranking, ...patch };
-    await saveWorksMapSection("ranking", next);
-  }, [worksMap.ranking, saveWorksMapSection]);
+  // rankings 全体（配列）を丸ごと保存するヘルパー
+  const saveRankings = useCallback(async (rankings) => {
+    await saveWorksMapSection("rankings", rankings);
+  }, [saveWorksMapSection]);
+
+  // 新しいランキングテーマを追加する
+  const addRanking = useCallback(async (title="新しいランキング") => {
+    const rid = uid();
+    const ranking = { id:rid, title, desc:"", items:[] };
+    await saveRankings([...(worksMap.rankings||[]), ranking]);
+    return rid;
+  }, [worksMap.rankings, saveRankings]);
+
+  // ランキングテーマそのものを削除する
+  const deleteRanking = useCallback(async (rankingId) => {
+    const rankings = (worksMap.rankings||[]).filter(r=>r.id!==rankingId);
+    await saveRankings(rankings);
+  }, [worksMap.rankings, saveRankings]);
+
+  const updateRanking = useCallback(async (rankingId, patch) => {
+    const rankings = (worksMap.rankings||[]).map(r=>{
+      if (r.id!==rankingId) return r;
+      return typeof patch==="function" ? patch(r) : { ...r, ...patch };
+    });
+    await saveRankings(rankings);
+  }, [worksMap.rankings, saveRankings]);
 
   // 作品をランキング末尾に追加する（理由欄は空で開始）。同一作品の重複追加は不可。
-  const addRankingItem = useCallback(async (novelId) => {
-    const items = worksMap.ranking.items||[];
-    if (items.some(it=>it.novelId===novelId)) return;
-    const item = { id:uid(), novelId, reason:"" };
-    await updateRanking({ items:[...items, item] });
-  }, [worksMap.ranking, updateRanking]);
+  const addRankingItem = useCallback(async (rankingId, novelId) => {
+    await updateRanking(rankingId, r => {
+      const items = r.items||[];
+      if (items.some(it=>it.novelId===novelId)) return r;
+      const item = { id:uid(), novelId, reason:"" };
+      return { ...r, items:[...items, item] };
+    });
+  }, [updateRanking]);
 
-  const removeRankingItem = useCallback(async (itemId) => {
-    const items = (worksMap.ranking.items||[]).filter(it=>it.id!==itemId);
-    await updateRanking({ items });
-  }, [worksMap.ranking, updateRanking]);
+  const removeRankingItem = useCallback(async (rankingId, itemId) => {
+    await updateRanking(rankingId, r => ({ ...r, items:(r.items||[]).filter(it=>it.id!==itemId) }));
+  }, [updateRanking]);
 
-  const setRankingReason = useCallback(async (itemId, reason) => {
-    const items = (worksMap.ranking.items||[]).map(it=>it.id===itemId?{...it,reason}:it);
-    await updateRanking({ items });
-  }, [worksMap.ranking, updateRanking]);
+  const setRankingReason = useCallback(async (rankingId, itemId, reason) => {
+    await updateRanking(rankingId, r => ({ ...r, items:(r.items||[]).map(it=>it.id===itemId?{...it,reason}:it) }));
+  }, [updateRanking]);
 
   // 配列内の順番＝順位なので、隣接スワップで順位を上下させる。
-  const moveRankingItem = useCallback(async (itemId, dir) => {
-    const items = [...(worksMap.ranking.items||[])];
-    const i = items.findIndex(it=>it.id===itemId);
-    const j = dir==="up" ? i-1 : i+1;
-    if (i<0 || j<0 || j>=items.length) return;
-    [items[i], items[j]] = [items[j], items[i]];
-    await updateRanking({ items });
-  }, [worksMap.ranking, updateRanking]);
+  const moveRankingItem = useCallback(async (rankingId, itemId, dir) => {
+    await updateRanking(rankingId, r => {
+      const items = [...(r.items||[])];
+      const i = items.findIndex(it=>it.id===itemId);
+      const j = dir==="up" ? i-1 : i+1;
+      if (i<0 || j<0 || j>=items.length) return r;
+      [items[i], items[j]] = [items[j], items[i]];
+      return { ...r, items };
+    });
+  }, [updateRanking]);
 
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
     addMessage, deleteMessage, markRead,
@@ -719,7 +756,7 @@ function useStore() {
     worksMap, updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
     updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
-    updateRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem };
+    updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem };
 }
 
 // ═══════════════ HELPERS ═══════════════
@@ -2222,14 +2259,41 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
       )}
 
       {tab==="ranking" && (
-        <div className="wmap-section fadein">
-          <div className="wmap-section-head">
-            <div className="wmap-section-title">{worksMap.ranking.title||"作品ランキング"}</div>
-            {worksMap.ranking.desc && <div className="wmap-section-desc">{worksMap.ranking.desc}</div>}
-          </div>
-          <RankingView data={worksMap.ranking} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        <RankingTabView rankings={worksMap.rankings||[]} novelById={novelById} onOpenNovel={onOpenNovel}/>
+      )}
+    </div>
+  );
+}
+
+// ───────── ランキング（複数テーマ・閲覧用） ─────────
+function RankingTabView({rankings, novelById, onOpenNovel}){
+  const [activeId, setActiveId] = useState(rankings[0]?.id || null);
+  const active = rankings.find(r=>r.id===activeId) || rankings[0];
+
+  useEffect(()=>{
+    if (rankings.length && !rankings.some(r=>r.id===activeId)) setActiveId(rankings[0].id);
+  }, [rankings, activeId]);
+
+  if (!rankings.length || !active) {
+    return <div className="wmap-empty">まだランキングが作られていません。管理パネルの「作品マップ」から登録できます。</div>;
+  }
+
+  return (
+    <div className="wmap-section fadein">
+      {rankings.length > 1 && (
+        <div className="tensen-tabs" style={{flexWrap:"wrap", marginBottom:18}}>
+          {rankings.map(r=>(
+            <button key={r.id} className={`tensen-tab ${r.id===active.id?"active":""}`} onClick={()=>setActiveId(r.id)}>
+              {r.title||"ランキング"}
+            </button>
+          ))}
         </div>
       )}
+      <div className="wmap-section-head">
+        <div className="wmap-section-title">{active.title||"作品ランキング"}</div>
+        {active.desc && <div className="wmap-section-desc">{active.desc}</div>}
+      </div>
+      <RankingView data={active} novelById={novelById} onOpenNovel={onOpenNovel}/>
     </div>
   );
 }
@@ -3793,8 +3857,23 @@ function WorksMapAdmin({store}){
     updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
     updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
-    updateRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem,
+    updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem,
   } = store;
+  const rankings = worksMap.rankings||[];
+  const [activeRankingId, setActiveRankingId] = useState(rankings[0]?.id || null);
+  useEffect(()=>{
+    if (rankings.length && !rankings.some(r=>r.id===activeRankingId)) setActiveRankingId(rankings[0].id);
+  }, [rankings, activeRankingId]);
+  const activeRanking = rankings.find(r=>r.id===activeRankingId) || null;
+
+  const handleAddRanking = async () => {
+    const rid = await addRanking("新しいランキング");
+    setActiveRankingId(rid);
+  };
+  const handleDeleteRanking = (rid) => {
+    if (!window.confirm("このランキングテーマを削除しますか？")) return;
+    deleteRanking(rid);
+  };
 
   return(
     <div>
@@ -3827,11 +3906,36 @@ function WorksMapAdmin({store}){
         />
       )}
       {tab==="ranking" && (
-        <RankingEditor
-          novels={novels} data={worksMap.ranking}
-          onUpdate={updateRanking} onAddItem={addRankingItem} onRemoveItem={removeRankingItem}
-          onSetReason={setRankingReason} onMoveItem={moveRankingItem}
-        />
+        <div>
+          <div className="wmap-admin-hint">テーマごとにランキングを複数作成できます。例えば「初めて読むならコレ」「衝撃のラストベスト5」のように、いくつかの観点から作品を順位づけしてみてください。</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16,alignItems:"center"}}>
+            {rankings.map(r=>(
+              <div key={r.id} style={{display:"flex",alignItems:"center",gap:4}}>
+                <button
+                  className={`wmap-admin-tab ${r.id===activeRankingId?"active":""}`}
+                  onClick={()=>setActiveRankingId(r.id)}
+                >{r.title||"（無題）"}</button>
+                {rankings.length>1 && (
+                  <button className="icon-btn danger" title="このランキングを削除" onClick={()=>handleDeleteRanking(r.id)}>🗑</button>
+                )}
+              </div>
+            ))}
+            <button className="btn btn-primary" style={{padding:"7px 16px",fontSize:11}} onClick={handleAddRanking}>＋ 新しいランキングを追加</button>
+          </div>
+          {activeRanking ? (
+            <RankingEditor
+              key={activeRanking.id}
+              novels={novels} data={activeRanking}
+              onUpdate={(patch)=>updateRanking(activeRanking.id, patch)}
+              onAddItem={(novelId)=>addRankingItem(activeRanking.id, novelId)}
+              onRemoveItem={(itemId)=>removeRankingItem(activeRanking.id, itemId)}
+              onSetReason={(itemId, reason)=>setRankingReason(activeRanking.id, itemId, reason)}
+              onMoveItem={(itemId, dir)=>moveRankingItem(activeRanking.id, itemId, dir)}
+            />
+          ) : (
+            <div style={{padding:"16px 0",color:"var(--txt3)",fontSize:12}}>「＋ 新しいランキングを追加」からテーマを作成してください</div>
+          )}
+        </div>
       )}
     </div>
   );
