@@ -312,6 +312,22 @@ function useStore() {
 
   const uid = () => db.collection("_").doc().id;
 
+  // 相関図（人物・関係・グループ）の保存に失敗した場合、これまではconsole.errorのみで
+  // 画面上は何も起きなかったかのように見えてしまっていた（＝サイレントに失敗→再読み込みで元に戻る）。
+  // 失敗時はユーザーにも分かるよう警告を出す。
+  const reportSaveError = (e) => {
+    const code = e && e.code ? e.code : "";
+    let msg = "相関図の変更を保存できませんでした。\n";
+    if (code === "permission-denied") {
+      msg += "（Firestoreのセキュリティルールにより書き込みが拒否されました。管理者としてログインしているかご確認ください）";
+    } else {
+      msg += "（" + (e && e.message ? e.message : String(e)) + "）";
+    }
+    msg += "\nお手数ですが、再度操作をお試しください。";
+    try { window.alert(msg); } catch(_) {}
+  };
+
+
   const setSite = useCallback(async v => {
     const next = typeof v === "function" ? v(site) : v;
     setSiteLocal(next);
@@ -373,14 +389,14 @@ function useStore() {
       x: 120 + (idx % 4) * 140, y: 100 + Math.floor(idx / 4) * 140 };
     const updated = [...(novel?.characters||[]), ch];
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); reportSaveError(e); }
     return chid;
   };
   const updateCharacter = async (nid, chid, patch) => {
     const novel = novels.find(n => n.id===nid);
     const updated = (novel?.characters||[]).map(c => c.id===chid ? {...c,...patch} : c);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ characters: updated }); } catch(e) { console.error(e); reportSaveError(e); }
   };
   const deleteCharacter = async (nid, chid) => {
     const novel = novels.find(n => n.id===nid);
@@ -390,7 +406,7 @@ function useStore() {
     // この人物が所属していたグループのメンバーからも除外する
     const updatedGroups = (novel?.charGroups||[]).map(g => ({...g, memberIds:(g.memberIds||[]).filter(id=>id!==chid)}));
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, characters:updated, charRelations:updatedRel, charGroups:updatedGroups} : n));
-    try { await db.collection("novels").doc(nid).update({ characters: updated, charRelations: updatedRel, charGroups: updatedGroups }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ characters: updated, charRelations: updatedRel, charGroups: updatedGroups }); } catch(e) { console.error(e); reportSaveError(e); }
   };
 
   // ───────── 所属先（グループ）のCRUD ─────────
@@ -402,14 +418,14 @@ function useStore() {
     const g = { id: gid, name:"新しいグループ", color:COLORS[idx%COLORS.length], memberIds:[] };
     const updated = [...(novel?.charGroups||[]), g];
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); reportSaveError(e); }
     return gid;
   };
   const updateCharGroup = async (nid, gid, patch) => {
     const novel = novels.find(n => n.id===nid);
     const updated = (novel?.charGroups||[]).map(g => g.id===gid ? {...g,...patch} : g);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); reportSaveError(e); }
   };
   const toggleCharGroupMember = async (nid, gid, chid) => {
     const novel = novels.find(n => n.id===nid);
@@ -419,13 +435,13 @@ function useStore() {
       return { ...g, memberIds: has ? g.memberIds.filter(id=>id!==chid) : [...(g.memberIds||[]), chid] };
     });
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); reportSaveError(e); }
   };
   const deleteCharGroup = async (nid, gid) => {
     const novel = novels.find(n => n.id===nid);
     const updated = (novel?.charGroups||[]).filter(g => g.id!==gid);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charGroups:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charGroups: updated }); } catch(e) { console.error(e); reportSaveError(e); }
   };
 
   // ───────── キャラクター相関図（関係線）のCRUD ─────────
@@ -437,20 +453,20 @@ function useStore() {
     const rel = { id: rid, fromId: chars[0].id, toId: chars[1].id, label:"", color:"#c8a86a", arrowType:"none" };
     const updated = [...(novel?.charRelations||[]), rel];
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); reportSaveError(e); }
     return rid;
   };
   const updateCharRelation = async (nid, rid, patch) => {
     const novel = novels.find(n => n.id===nid);
     const updated = (novel?.charRelations||[]).map(r => r.id===rid ? {...r,...patch} : r);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); reportSaveError(e); }
   };
   const deleteCharRelation = async (nid, rid) => {
     const novel = novels.find(n => n.id===nid);
     const updated = (novel?.charRelations||[]).filter(r => r.id!==rid);
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, charRelations:updated} : n));
-    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); }
+    try { await db.collection("novels").doc(nid).update({ charRelations: updated }); } catch(e) { console.error(e); reportSaveError(e); }
   };
   const updateChapter = async (nid, cid, patch) => {
     const novel = novels.find(n => n.id===nid);
