@@ -4761,7 +4761,7 @@ function AdminPanel({store,onClose}){
                       </div>
                     </div>
                     <div className="arow-actions">
-                      <button className={`icon-btn ${n.published===false?"":"primary"}`} onClick={()=>updateNovel(n.id,{published:n.published===false})}>{n.published===false?"👁 公開する":"🚫 非公開にする"}</button>
+                      <button className={`icon-btn ${n.published===false?"":"primary"}`} onClick={()=>updateNovel(n.id,{published:n.published===false})}>{n.published===false?"👁 公開":"🚫 非公開"}</button>
                       <button className={`icon-btn ${n.pinned?"primary":""}`} onClick={()=>updateNovel(n.id,{pinned:!n.pinned})}>{n.pinned?"📌":"📌"} {n.pinned?"固定解除":"固定"}</button>
                       <button className={`icon-btn ${n.locked?"danger":""}`} onClick={()=>updateNovel(n.id,{locked:!n.locked})}>{n.locked?"🔒":"🔓"} {n.locked?"解除":"ロック"}</button>
                       <button className="icon-btn primary" onClick={()=>{ setEditNid(n.id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); scrollAdminTop(); }}>✏️ 編集</button>
@@ -4797,7 +4797,7 @@ function AdminPanel({store,onClose}){
             {novelEditTab==="info"&&(<>
             <div style={{background:"color-mix(in srgb,var(--bg) 92%,#888 8%)",border:"1px solid var(--border-hi)",borderRadius:3,padding:"4px 16px",marginBottom:24}}>
               <div className="toggle-row">
-                <div><div className="toggle-label">👁 公開する</div><div className="toggle-desc">OFFにすると作品一覧・作品マップ・台詞ページなど読者向けの表示から消えます（編集は引き続き可能です）</div></div>
+                <div><div className="toggle-label">👁 公開</div><div className="toggle-desc">OFFにすると作品一覧・作品マップ・台詞ページなど読者向けの表示から消えます（編集は引き続き可能です）</div></div>
                 <label className="toggle-switch"><input type="checkbox" checked={eNov.published!==false} onChange={e=>updateNovel(eNov.id,{published:e.target.checked})}/><span className="toggle-slider"/></label>
               </div>
               <div className="toggle-row">
