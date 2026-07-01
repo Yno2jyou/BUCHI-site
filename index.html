@@ -375,7 +375,7 @@ function useStore() {
       title:"新しい作品", subtitle:"", author:author.name, genre:"小説",
       tags:[], description:"", color1:"#0a0a14", color2:"#1a1a2e", accent:"#c8a86a",
       wordCount:"", updated: new Date().toISOString().slice(0,7),
-      chapters:[], createdAt: now, pinned:false, locked:false,
+      chapters:[], createdAt: now, pinned:false, locked:false, published:true,
     };
     const ref = await db.collection("novels").add(data);
     return ref.id;
@@ -4754,12 +4754,14 @@ function AdminPanel({store,onClose}){
                         <div className="arow-title">
                           {n.pinned&&<span style={{fontSize:11,marginRight:4}}>📌</span>}
                           {n.locked&&<span style={{fontSize:11,marginRight:4}}>🔒</span>}
+                          {n.published===false&&<span style={{fontSize:10,marginRight:6,padding:"1px 6px",borderRadius:2,background:"color-mix(in srgb,var(--bg) 80%,#888 20%)",color:"var(--txt3)",letterSpacing:".06em"}}>非公開</span>}
                           {n.title}
                         </div>
                         <div className="arow-meta">{n.author} · {(n.chapters||[]).length}章 · {fmtCount(countChars(n))}</div>
                       </div>
                     </div>
                     <div className="arow-actions">
+                      <button className={`icon-btn ${n.published===false?"":"primary"}`} onClick={()=>updateNovel(n.id,{published:n.published===false})}>{n.published===false?"👁 公開する":"🚫 非公開にする"}</button>
                       <button className={`icon-btn ${n.pinned?"primary":""}`} onClick={()=>updateNovel(n.id,{pinned:!n.pinned})}>{n.pinned?"📌":"📌"} {n.pinned?"固定解除":"固定"}</button>
                       <button className={`icon-btn ${n.locked?"danger":""}`} onClick={()=>updateNovel(n.id,{locked:!n.locked})}>{n.locked?"🔒":"🔓"} {n.locked?"解除":"ロック"}</button>
                       <button className="icon-btn primary" onClick={()=>{ setEditNid(n.id); setSec("novel_edit"); setNovelEditTab("info"); setMenuSelected(true); scrollAdminTop(); }}>✏️ 編集</button>
@@ -4784,6 +4786,7 @@ function AdminPanel({store,onClose}){
             <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:24}}>
               <button className="back-link" onClick={()=>setSec("novels")}>← 作品一覧</button>
               <div className="admin-title" style={{margin:0}}>{eNov.title}</div>
+              {eNov.published===false&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:2,background:"color-mix(in srgb,var(--bg) 80%,#888 20%)",color:"var(--txt3)",letterSpacing:".06em"}}>非公開</span>}
             </div>
             <div className="char-modal-tabs" style={{marginBottom:28}}>
               <button className={`char-modal-tab ${novelEditTab==="info"?"active":""}`} onClick={()=>setNovelEditTab("info")}>基本情報</button>
@@ -4793,6 +4796,10 @@ function AdminPanel({store,onClose}){
 
             {novelEditTab==="info"&&(<>
             <div style={{background:"color-mix(in srgb,var(--bg) 92%,#888 8%)",border:"1px solid var(--border-hi)",borderRadius:3,padding:"4px 16px",marginBottom:24}}>
+              <div className="toggle-row">
+                <div><div className="toggle-label">👁 公開する</div><div className="toggle-desc">OFFにすると作品一覧・作品マップ・台詞ページなど読者向けの表示から消えます（編集は引き続き可能です）</div></div>
+                <label className="toggle-switch"><input type="checkbox" checked={eNov.published!==false} onChange={e=>updateNovel(eNov.id,{published:e.target.checked})}/><span className="toggle-slider"/></label>
+              </div>
               <div className="toggle-row">
                 <div><div className="toggle-label">📌 先頭に固定</div><div className="toggle-desc">作品一覧の最上部に表示されます</div></div>
                 <label className="toggle-switch"><input type="checkbox" checked={!!eNov.pinned} onChange={e=>updateNovel(eNov.id,{pinned:e.target.checked})}/><span className="toggle-slider"/></label>
@@ -5073,6 +5080,10 @@ function BgTextLayer({novels}){
 function App(){
   const store=useStore();
   const {site,author,novels,addMessage,loading,dbError}=store;
+  // 「非公開」に設定された作品は、作品一覧・作品マップ・台詞ページ・
+  // 著者プロフィール・背景の文字演出など読者向けの表示から除外する。
+  // （published フィールドが無い旧データは公開扱いとする）
+  const publicNovels = useMemo(()=>novels.filter(n=>n.published!==false), [novels]);
   const [page,setPage]=useState("home");
   const [novel,setNovel]=useState(null);
   const [chapterId,setChapterId]=useState(null);
@@ -5232,7 +5243,7 @@ function App(){
     <>
       <Styles site={site} lightMode={lightMode}/>
       <div className="app">
-        <BgTextLayer novels={novels}/>
+        <BgTextLayer novels={publicNovels}/>
         {loading&&(
           <div style={{position:"fixed",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--bg)",zIndex:9000,gap:20}}>
             <div style={{fontFamily:"var(--serif)",fontSize:32,color:"var(--accent)",letterSpacing:"0.12em"}}>{site.name||"文藻"}</div>
@@ -5267,14 +5278,14 @@ function App(){
             onLogout={handleLogout}
           />
         )}
-        {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={novels} onOpen={openNovel} onOpenMap={()=>nav("map")}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={publicNovels} onOpen={openNovel} onOpenMap={()=>nav("map")}/>}
         {!loading&&!dbError&&!adminOpen&&page==="hitorigoto"&&<HitorigotoPage author={author}/>}
         {!loading&&!dbError&&!adminOpen&&page==="encounter"&&<EncounterPage onExit={()=>nav("home")} stories={store.motokoStories}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="tensen"&&<TenSenPage novels={novels} onOpenNovel={openNovelById}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="map"&&<WorksMapPage worksMap={store.worksMap} novels={novels} onOpenNovel={openNovelById} onBack={()=>nav("home")}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="detail"&&liveNovel&&<DetailPage novel={liveNovel} onBack={()=>nav("home")} onRead={openChapter} onSendMessage={addMessage}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="reading"&&liveNovel&&chapterId&&<ReadingPage novel={liveNovel} chapterId={chapterId} onBack={()=>nav("detail")} onChapter={setChapterId} lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}/>}
-        {!loading&&!dbError&&!adminOpen&&page==="profile"&&<ProfilePage author={author} novels={novels} onToWorks={()=>nav("home")} site={site} onSendMessage={addMessage}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="tensen"&&<TenSenPage novels={publicNovels} onOpenNovel={openNovelById}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="map"&&<WorksMapPage worksMap={store.worksMap} novels={publicNovels} onOpenNovel={openNovelById} onBack={()=>nav("home")}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="detail"&&liveNovel&&liveNovel.published!==false&&<DetailPage novel={liveNovel} onBack={()=>nav("home")} onRead={openChapter} onSendMessage={addMessage}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="reading"&&liveNovel&&liveNovel.published!==false&&chapterId&&<ReadingPage novel={liveNovel} chapterId={chapterId} onBack={()=>nav("detail")} onChapter={setChapterId} lightMode={lightMode} onToggleLight={()=>setLightMode(m=>!m)}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="profile"&&<ProfilePage author={author} novels={publicNovels} onToWorks={()=>nav("home")} site={site} onSendMessage={addMessage}/>}
         {!loading&&!dbError&&adminOpen&&<AdminPanel store={store} onClose={()=>setAdminOpen(false)}/>}
         {showLogin&&(
           <AuthLoginModal
