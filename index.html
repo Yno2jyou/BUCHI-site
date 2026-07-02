@@ -2133,7 +2133,7 @@ function Nav({page, onNav, site, lightMode, onToggleLight, authed, onAdminClick,
         <button className={`nav-btn ${page==="home"?"active":""}`} onClick={()=>onNav("home")}>作品一覧</button>
         <button className={`nav-btn ${page==="hitorigoto"?"active":""}`} onClick={()=>onNav("hitorigoto")}>ひとりごと</button>
         <button className={`nav-btn ${page==="encounter"?"active":""}`} onClick={()=>onNav("encounter")}>九十九人の男たち</button>
-        <button className={`nav-btn ${page==="tensen"?"active":""}`} onClick={()=>onNav("tensen")}>台詞・地の文</button>
+        <button className={`nav-btn ${page==="map"?"active":""}`} onClick={()=>onNav("map")}>作品マップ</button>
         <button className={`nav-btn ${page==="profile"?"active":""}`} onClick={()=>onNav("profile")}>著者</button>
       </div>
       <div className="nav-right">
@@ -2624,7 +2624,7 @@ function HomePage({site,novels,onOpen,onOpenMap}){
         <div className="section-head rise d2">
           <h2 className="section-title">収録作品</h2>
           <div className="section-right">
-            <button className="tag-chip" onClick={onOpenMap}>🗺 作品マップ</button>
+            <button className="tag-chip" onClick={onOpenMap}>📜 台詞・地の文</button>
             <button className={`tag-chip ${byDate?"active":""}`} onClick={()=>setByDate(b=>!b)}>📅 年月別</button>
             <span className="section-meta">{filtered.length} / {novels.length}</span>
           </div>
@@ -5278,7 +5278,7 @@ function App(){
             onLogout={handleLogout}
           />
         )}
-        {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={publicNovels} onOpen={openNovel} onOpenMap={()=>nav("map")}/>}
+        {!loading&&!dbError&&!adminOpen&&page==="home"&&<HomePage site={site} novels={publicNovels} onOpen={openNovel} onOpenMap={()=>nav("tensen")}/>}
         {!loading&&!dbError&&!adminOpen&&page==="hitorigoto"&&<HitorigotoPage author={author}/>}
         {!loading&&!dbError&&!adminOpen&&page==="encounter"&&<EncounterPage onExit={()=>nav("home")} stories={store.motokoStories}/>}
         {!loading&&!dbError&&!adminOpen&&page==="tensen"&&<TenSenPage novels={publicNovels} onOpenNovel={openNovelById}/>}
