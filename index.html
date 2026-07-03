@@ -2330,12 +2330,21 @@ function QuadrantChart({data, novelById, onOpenNovel}){
               onMouseEnter={()=>setHoverId(p.novelId)} onMouseLeave={()=>setHoverId(null)}
               onTouchStart={()=>setHoverId(p.novelId)}>
               <circle cx={cx} cy={cy} r={hovered?10:7} fill={p.novel.accent||"var(--accent)"} className="wmap-point-dot"/>
-              {hovered && (
-                <>
-                  <rect x={cx-70} y={cy-38} width="140" height="24" rx="3" className="wmap-point-tag-bg"/>
-                  <text x={cx} y={cy-21} className="wmap-point-tag-text" textAnchor="middle">{p.novel.title}</text>
-                </>
-              )}
+              {hovered && (() => {
+                const label = p.novel.title || "";
+                // タイトルの長さに応じて枠を可変にし、それでも収まらない場合は
+                // textLength で文字間隔を詰めて必ず枠内に収める。
+                const estW = label.length * 12.5 + 28;
+                const tagW = Math.min(320, Math.max(140, estW));
+                const fits = estW <= tagW;
+                return (
+                  <>
+                    <rect x={cx-tagW/2} y={cy-38} width={tagW} height="24" rx="3" className="wmap-point-tag-bg"/>
+                    <text x={cx} y={cy-21} className="wmap-point-tag-text" textAnchor="middle"
+                      textLength={fits?undefined:tagW-16} lengthAdjust={fits?undefined:"spacingAndGlyphs"}>{label}</text>
+                  </>
+                );
+              })()}
             </g>
           );
         })}
@@ -2505,17 +2514,27 @@ function FlowchartView({data, novelById, onOpenNovel}){
             const isCurrent=n.id===currentId;
             const isRevealed=isResult && isCurrent; // おすすめ確定時だけ開示
             const novel = isResult ? novelById[n.novelId] : null;
+            const label = isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問");
+            // ノードの枠からラベルがはみ出さないよう、文字数に応じて
+            // 枠（質問ノードは矩形の幅、結果ノードは円の半径）を可変にし、
+            // それでも収まらない場合は textLength で圧縮する。
+            const qW = Math.min(220, Math.max(116, label.length*11.5+24));
+            const rR = Math.min(70, Math.max(46, label.length*5.4+20));
+            const boxSpan = isResult ? rR*1.7 : qW-16;
+            const estW = label.length * (isResult?11:10.5);
+            const fits = estW <= boxSpan;
             return (
               <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor:"default"}}>
                 {isResult
-                  ? <circle cx={n.x} cy={n.y} r="46"
+                  ? <circle cx={n.x} cy={n.y} r={rR}
                       className={`wmap-flow-node-result ${isCurrent?"current":""}`}
                       style={isRevealed ? {} : {fill:"var(--surface)",fillOpacity:1}}/>
-                  : <rect x={(n.x??100)-58} y={(n.y??100)-30} width="116" height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
+                  : <rect x={(n.x??100)-qW/2} y={(n.y??100)-30} width={qW} height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
                 }
                 {(!isResult || isRevealed) && (
-                  <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle">
-                    {isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問")}
+                  <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle"
+                    textLength={fits?undefined:boxSpan} lengthAdjust={fits?undefined:"spacingAndGlyphs"}>
+                    {label}
                   </text>
                 )}
               </g>
