@@ -5212,6 +5212,28 @@ function App(){
     } else {
       vp.setAttribute("content","width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
     }
+
+    // iOS Safari等は、読み込み後にviewportのuser-scalableを変更しても
+    // 反映されない場合があるため、reading画面以外ではピンチズーム／
+    // ダブルタップズームのジェスチャー自体をJSで直接ブロックする。
+    const blockPinch = e=>{ if(e.touches&&e.touches.length>1) e.preventDefault(); };
+    const blockGesture = e=>{ e.preventDefault(); };
+    let lastTouchEnd=0;
+    const blockDoubleTap = e=>{
+      const now=Date.now();
+      if(now-lastTouchEnd<=300) e.preventDefault();
+      lastTouchEnd=now;
+    };
+    if(page!=="reading"){
+      document.addEventListener("touchmove",blockPinch,{passive:false});
+      document.addEventListener("gesturestart",blockGesture,{passive:false});
+      document.addEventListener("touchend",blockDoubleTap,{passive:false});
+    }
+    return ()=>{
+      document.removeEventListener("touchmove",blockPinch);
+      document.removeEventListener("gesturestart",blockGesture);
+      document.removeEventListener("touchend",blockDoubleTap);
+    };
   },[page]);
   const liveNovel=novel?novels.find(n=>n.id===novel.id)||novel:null;
 
