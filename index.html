@@ -500,6 +500,19 @@ function useStore() {
     setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:updated} : n));
     try { await db.collection("novels").doc(nid).update({ chapters: updated }); } catch(e) { console.error(e); }
   };
+  // 章の並び替え（direction: -1で上へ、+1で下へ。1つ入れ替える方式）
+  const moveChapter = async (nid, cid, direction) => {
+    const novel = novels.find(n => n.id===nid);
+    const list = [...(novel?.chapters||[])];
+    const idx = list.findIndex(c => c.id===cid);
+    if(idx<0) return;
+    const newIdx = idx + direction;
+    if(newIdx<0 || newIdx>=list.length) return;
+    [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+    setNovelsLocal(a => a.map(n => n.id===nid ? {...n, chapters:list} : n));
+    try { await db.collection("novels").doc(nid).update({ chapters: list }); } catch(e) { console.error(e); }
+  };
+
 
   const addMessage = async m => {
     const data = { ...m, date: new Date().toLocaleString("ja-JP"), read: false,
@@ -781,7 +794,7 @@ function useStore() {
 
   return { site, setSite, author, setAuthor, novels, messages, loading, dbError,
     addMessage, deleteMessage, markRead,
-    addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter,
+    addNovel, updateNovel, deleteNovel, addChapter, updateChapter, deleteChapter, moveChapter,
     addCharacter, updateCharacter, deleteCharacter,
     addCharRelation, updateCharRelation, deleteCharRelation,
     addCharGroup, updateCharGroup, deleteCharGroup, toggleCharGroupMember,
@@ -4469,7 +4482,7 @@ function RankingEditor({novels, data, onUpdate, onAddItem, onRemoveItem, onSetRe
 // ═══════════════ ADMIN ═══════════════
 function AdminPanel({store,onClose}){
   const {site,setSite,author,setAuthor,novels,messages,deleteMessage,markRead,
-    addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,
+    addNovel,updateNovel,deleteNovel,addChapter,updateChapter,deleteChapter,moveChapter,
     addCharacter,updateCharacter,deleteCharacter,
     addCharRelation,updateCharRelation,deleteCharRelation,
     addCharGroup,updateCharGroup,deleteCharGroup,toggleCharGroupMember,
@@ -4946,6 +4959,8 @@ function AdminPanel({store,onClose}){
                   <div key={ch.id} className="ch-row">
                     <span className="ch-num">0{i+1}</span><span className="ch-txt">{ch.title}</span>
                     <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
+                      <button className="icon-btn" onClick={()=>moveChapter(eNov.id,ch.id,-1)} disabled={i===0} title="上へ移動">↑</button>
+                      <button className="icon-btn" onClick={()=>moveChapter(eNov.id,ch.id,1)} disabled={i===(eNov.chapters||[]).length-1} title="下へ移動">↓</button>
                       <button className="icon-btn primary" onClick={()=>{ setEditCh({nid:eNov.id,cid:ch.id}); setSec("chapter_edit"); setMenuSelected(true); scrollAdminTop(); }}>✏️</button>
                       <button className="icon-btn danger" onClick={()=>setDelConfirm({type:"chapter",nid:eNov.id,id:ch.id,label:ch.title})}>🗑</button>
                     </div>
