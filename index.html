@@ -1665,7 +1665,7 @@ function Styles({site, lightMode}){
       linear-gradient(var(--border) 1px,transparent 1px) 0 0/24px 24px,
       linear-gradient(90deg,var(--border) 1px,transparent 1px) 0 0/24px 24px}
     .wmap-flow-editor-svg{position:absolute;inset:0;pointer-events:none}
-    .wmap-flow-editor-node{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;cursor:grab;user-select:none;transform:translate(-50%,-50%);touch-action:none;padding:6px 10px;font-size:10.5px;line-height:1.5;color:var(--txt);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+    .wmap-flow-editor-node{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;cursor:grab;user-select:none;transform:translate(-50%,-50%);touch-action:none;padding:6px 10px;font-size:10.5px;line-height:1.5;color:var(--txt);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:pre-wrap}
     .wmap-flow-editor-node.dragging{cursor:grabbing;z-index:5}
     .wmap-flow-editor-node.q{width:116px;height:60px;background:var(--surface);border:1.5px solid var(--border-hi)}
     .wmap-flow-editor-node.result{width:92px;height:92px;border-radius:50%;background:var(--accent-dim);border:1.5px solid var(--accent)}
@@ -2523,20 +2523,27 @@ function FlowchartView({data, novelById, onOpenNovel}){
             const maxCharsPerLine = Math.max(4, Math.floor(((isResult?rDia*0.72:qW-20)) / (isResult?11:10.5)));
             const maxLines = 3;
             const wrapLabel = (text, maxChars, maxL) => {
+              // ユーザーが入力した改行はそのまま活かし、
+              // 1行が長すぎる場合だけ追加で折り返す。
+              const rawLines = String(text).split("\n");
               const lines=[];
-              let rest=text;
-              while(rest.length>0 && lines.length<maxL){
-                if(rest.length<=maxChars || lines.length===maxL-1){
-                  let chunk=rest.slice(0,maxChars);
-                  if(lines.length===maxL-1 && rest.length>maxChars) chunk=chunk.slice(0,-1)+"…";
-                  lines.push(chunk);
-                  rest=rest.slice(chunk.length);
-                } else {
-                  lines.push(rest.slice(0,maxChars));
-                  rest=rest.slice(maxChars);
+              for(const raw of rawLines){
+                let rest=raw;
+                if(rest.length===0){ lines.push(""); continue; }
+                while(rest.length>0 && lines.length<maxL){
+                  if(rest.length<=maxChars || lines.length===maxL-1){
+                    let chunk=rest.slice(0,maxChars);
+                    if(lines.length===maxL-1 && rest.length>maxChars) chunk=chunk.slice(0,-1)+"…";
+                    lines.push(chunk);
+                    rest=rest.slice(chunk.length);
+                  } else {
+                    lines.push(rest.slice(0,maxChars));
+                    rest=rest.slice(maxChars);
+                  }
                 }
+                if(lines.length>=maxL) break;
               }
-              return lines.length?lines:[""];
+              return lines.length?lines.slice(0,maxL):[""];
             };
             const lines = wrapLabel(label, maxCharsPerLine, maxLines);
             const lineHeight = isResult?13:14;
