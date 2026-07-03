@@ -5197,6 +5197,22 @@ function App(){
   const openNovel=n=>{ setNovel(n); nav("detail"); };
   const openNovelById=id=>{ const n=novels.find(x=>x.id===id); if(n) openNovel(n); };
   const openChapter=id=>{ setChapterId(id); nav("reading"); };
+
+  // 作品閲覧画面（reading）のみ、ピンチズームを許可する。
+  // それ以外の画面では拡大縮小を禁止したまま。
+  useEffect(()=>{
+    let vp=document.querySelector('meta[name="viewport"]');
+    if(!vp){
+      vp=document.createElement("meta");
+      vp.name="viewport";
+      document.head.appendChild(vp);
+    }
+    if(page==="reading"){
+      vp.setAttribute("content","width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes");
+    } else {
+      vp.setAttribute("content","width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
+    }
+  },[page]);
   const liveNovel=novel?novels.find(n=>n.id===novel.id)||novel:null;
 
   const handleAdminClick = () => {
