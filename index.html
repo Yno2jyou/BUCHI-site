@@ -2515,26 +2515,48 @@ function FlowchartView({data, novelById, onOpenNovel}){
             const isRevealed=isResult && isCurrent; // おすすめ確定時だけ開示
             const novel = isResult ? novelById[n.novelId] : null;
             const label = isResult ? (novel?novel.title:n.text||"結果") : (n.text||"質問");
-            // ノードの枠からラベルがはみ出さないよう、文字数に応じて
-            // 枠（質問ノードは矩形の幅、結果ノードは円の半径）を可変にし、
-            // それでも収まらない場合は textLength で圧縮する。
-            const qW = Math.min(220, Math.max(116, label.length*11.5+24));
-            const rR = Math.min(70, Math.max(46, label.length*5.4+20));
-            const boxSpan = isResult ? rR*1.7 : qW-16;
-            const estW = label.length * (isResult?11:10.5);
-            const fits = estW <= boxSpan;
+            // ノードの枠からラベルがはみ出さないよう、文字数に応じて改行する。
+            // 質問ノードは矩形の幅、結果ノードは円の直径を基準に、
+            // 1行あたりの最大文字数を決めて折り返し、最大3行まで表示する。
+            const qW = 132;
+            const rDia = 92;
+            const maxCharsPerLine = Math.max(4, Math.floor(((isResult?rDia*0.72:qW-20)) / (isResult?11:10.5)));
+            const maxLines = 3;
+            const wrapLabel = (text, maxChars, maxL) => {
+              const lines=[];
+              let rest=text;
+              while(rest.length>0 && lines.length<maxL){
+                if(rest.length<=maxChars || lines.length===maxL-1){
+                  let chunk=rest.slice(0,maxChars);
+                  if(lines.length===maxL-1 && rest.length>maxChars) chunk=chunk.slice(0,-1)+"…";
+                  lines.push(chunk);
+                  rest=rest.slice(chunk.length);
+                } else {
+                  lines.push(rest.slice(0,maxChars));
+                  rest=rest.slice(maxChars);
+                }
+              }
+              return lines.length?lines:[""];
+            };
+            const lines = wrapLabel(label, maxCharsPerLine, maxLines);
+            const lineHeight = isResult?13:14;
+            const qH = Math.max(60, lines.length*lineHeight+30);
+            const rR = Math.max(46, rDia/2, lines.length>1?(lines.length*lineHeight+34)/2:46);
+            const nx = n.x??100, ny = n.y??100;
+            const startY = ny - (lines.length-1)*lineHeight/2;
             return (
               <g key={n.id} opacity={isCurrent?1:0.42} style={{cursor:"default"}}>
                 {isResult
-                  ? <circle cx={n.x} cy={n.y} r={rR}
+                  ? <circle cx={nx} cy={ny} r={rR}
                       className={`wmap-flow-node-result ${isCurrent?"current":""}`}
                       style={isRevealed ? {} : {fill:"var(--surface)",fillOpacity:1}}/>
-                  : <rect x={(n.x??100)-qW/2} y={(n.y??100)-30} width={qW} height="60" rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
+                  : <rect x={nx-qW/2} y={ny-qH/2} width={qW} height={qH} rx="8" className={`wmap-flow-node-q ${isCurrent?"current":""}`}/>
                 }
                 {(!isResult || isRevealed) && (
-                  <text x={n.x} y={(n.y??100)+4} className="wmap-flow-node-text" textAnchor="middle"
-                    textLength={fits?undefined:boxSpan} lengthAdjust={fits?undefined:"spacingAndGlyphs"}>
-                    {label}
+                  <text x={nx} y={startY+4} className="wmap-flow-node-text" textAnchor="middle">
+                    {lines.map((ln,i)=>(
+                      <tspan key={i} x={nx} y={startY+4+i*lineHeight}>{ln}</tspan>
+                    ))}
                   </text>
                 )}
               </g>
