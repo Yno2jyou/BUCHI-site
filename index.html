@@ -656,7 +656,17 @@ function useStore() {
     const idx = existing.length;
     const node = { id:nid, kind, text: kind==="result" ? "結果ノード" : "質問を入力",
       novelId:"", x: 140+(idx%3)*200, y: 100+Math.floor(idx/3)*150 };
-    await updateFlowchart({ nodes:[...existing, node] });
+    // 同じ種類（質問／結果）のノードのうち、最後の直後に挿入する。
+    // 見つからなければ配列の末尾に追加する。
+    let lastSameKindIdx = -1;
+    for(let i=existing.length-1;i>=0;i--){ if(existing[i].kind===kind){ lastSameKindIdx=i; break; } }
+    let nextNodes;
+    if(lastSameKindIdx===-1){
+      nextNodes = [...existing, node];
+    } else {
+      nextNodes = [...existing.slice(0,lastSameKindIdx+1), node, ...existing.slice(lastSameKindIdx+1)];
+    }
+    await updateFlowchart({ nodes: nextNodes });
     return nid;
   }, [worksMap.flowchart, updateFlowchart]);
 
@@ -687,6 +697,30 @@ function useStore() {
     const edges = (worksMap.flowchart.edges||[]).filter(e=>e.id!==edgeId);
     await updateFlowchart({ edges });
   }, [worksMap.flowchart, updateFlowchart]);
+
+  // ノード一覧の並び順を、隣接スワップで自由に入れ替える。
+  const moveFlowNode = useCallback(async (nodeId, dir) => {
+    await updateFlowchart(fc => {
+      const nodes = [...(fc.nodes||[])];
+      const i = nodes.findIndex(n=>n.id===nodeId);
+      const j = dir==="up" ? i-1 : i+1;
+      if (i<0 || j<0 || j>=nodes.length) return fc;
+      [nodes[i], nodes[j]] = [nodes[j], nodes[i]];
+      return { ...fc, nodes };
+    });
+  }, [updateFlowchart]);
+
+  // 分岐（矢印）一覧の並び順を、隣接スワップで自由に入れ替える。
+  const moveFlowEdge = useCallback(async (edgeId, dir) => {
+    await updateFlowchart(fc => {
+      const edges = [...(fc.edges||[])];
+      const i = edges.findIndex(e=>e.id===edgeId);
+      const j = dir==="up" ? i-1 : i+1;
+      if (i<0 || j<0 || j>=edges.length) return fc;
+      [edges[i], edges[j]] = [edges[j], edges[i]];
+      return { ...fc, edges };
+    });
+  }, [updateFlowchart]);
 
   // rankings 全体（配列）を丸ごと保存するヘルパー
   const saveRankings = useCallback(async (rankings) => {
@@ -755,7 +789,7 @@ function useStore() {
     motokoStories, updateMotokoStory, addMotokoStory, deleteMotokoStory,
     worksMap, updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
-    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
+    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, moveFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge, moveFlowEdge,
     updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem };
 }
 
@@ -3904,7 +3938,7 @@ function WorksMapAdmin({store}){
   const {novels, worksMap,
     updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
-    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge,
+    updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, moveFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge, moveFlowEdge,
     updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem,
   } = store;
   const rankings = worksMap.rankings||[];
@@ -3949,8 +3983,8 @@ function WorksMapAdmin({store}){
       {tab==="flow" && (
         <FlowchartEditor
           novels={novels} data={worksMap.flowchart}
-          onUpdate={updateFlowchart} onAddNode={addFlowNode} onUpdateNode={updateFlowNode} onDeleteNode={deleteFlowNode}
-          onAddEdge={addFlowEdge} onUpdateEdge={updateFlowEdge} onDeleteEdge={deleteFlowEdge}
+          onUpdate={updateFlowchart} onAddNode={addFlowNode} onUpdateNode={updateFlowNode} onDeleteNode={deleteFlowNode} onMoveNode={moveFlowNode}
+          onAddEdge={addFlowEdge} onUpdateEdge={updateFlowEdge} onDeleteEdge={deleteFlowEdge} onMoveEdge={moveFlowEdge}
         />
       )}
       {tab==="ranking" && (
@@ -4201,7 +4235,7 @@ function RadarEditor({novels, data, onUpdate, onAddAxis, onUpdateAxis, onDeleteA
 // ───────── フローチャート エディタ ─────────
 // 質問ノード・結果ノードをドラッグで自由配置し、矢印（分岐）でつなぐ。
 // 構造はキャラクター相関図エディタと同様の考え方。
-function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDeleteNode, onAddEdge, onUpdateEdge, onDeleteEdge}){
+function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDeleteNode, onMoveNode, onAddEdge, onUpdateEdge, onDeleteEdge, onMoveEdge}){
   const nodes=data.nodes||[];
   const edges=data.edges||[];
   const [selectedId,setSelectedId]=useState(null);
@@ -4318,6 +4352,10 @@ function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDel
             return(
               <div key={n.id} className="wmap-flow-node-row">
                 <span className="wmap-flow-node-kind-badge">{isResult?"結果":"質問"}{i===0?"・開始":""}</span>
+                <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                  <button className="icon-btn" onClick={()=>onMoveNode(n.id,"up")} disabled={i===0} title="順番を上げる">↑</button>
+                  <button className="icon-btn" onClick={()=>onMoveNode(n.id,"down")} disabled={i===nodes.length-1} title="順番を下げる">↓</button>
+                </div>
                 <div style={{flex:1,minWidth:180}}>
                   {isResult ? (
                     <select className="char-rel-select" style={{width:"100%"}} value={n.novelId||""} onChange={e=>onUpdateNode(n.id,{novelId:e.target.value})}>
@@ -4346,8 +4384,12 @@ function FlowchartEditor({novels, data, onUpdate, onAddNode, onUpdateNode, onDel
           </div>
           {edges.length===0
             ? <div style={{padding:"10px 0",color:"var(--txt3)",fontSize:12}}>まだ分岐がありません</div>
-            : edges.map(e=>(
+            : edges.map((e,ei)=>(
               <div key={e.id} className="wmap-flow-edge-row">
+                <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                  <button className="icon-btn" onClick={()=>onMoveEdge(e.id,"up")} disabled={ei===0} title="順番を上げる">↑</button>
+                  <button className="icon-btn" onClick={()=>onMoveEdge(e.id,"down")} disabled={ei===edges.length-1} title="順番を下げる">↓</button>
+                </div>
                 <select className="char-rel-select" value={e.fromId} onChange={ev=>onUpdateEdge(e.id,{fromId:ev.target.value})}>
                   {nodes.map(n=><option key={n.id} value={n.id}>{n.kind==="result"?"🔵":"⬜"} {(n.text||(n.kind==="result"?"結果":"質問")).slice(0,16)}</option>)}
                 </select>
