@@ -65,6 +65,8 @@ const DEFAULT_AUTHOR = {
 // 管理パネルの「作品マップ」タブから、軸名・質問文・各作品の位置や数値を
 // 自由に書き換えられる。
 const DEFAULT_WORKS_MAP = {
+  // ── 各セクションの公開/制作中の切り替え ──
+  sectionsEnabled: { quadrant:true, radar:true, flow:true, ranking:true },
   // ── 四象限マトリクス ──
   quadrant: {
     title:"四象限マップ",
@@ -323,6 +325,7 @@ function useStore() {
           }
         }
         setWorksMapLocal({
+          sectionsEnabled: { ...DEFAULT_WORKS_MAP.sectionsEnabled, ...(d.sectionsEnabled||{}) },
           quadrant: { ...DEFAULT_WORKS_MAP.quadrant, ...(d.quadrant||{}) },
           radar: { ...DEFAULT_WORKS_MAP.radar, ...(d.radar||{}) },
           flowchart: { ...DEFAULT_WORKS_MAP.flowchart, ...(d.flowchart||{}) },
@@ -594,6 +597,14 @@ function useStore() {
     });
   }, []);
 
+  // 「作品マップ」4種の可視化（四象限・レーダー・フローチャート・ランキング）を
+  // 個別に公開／制作中（内容を非表示にして「制作中」とだけ出す）に切り替える。
+  const toggleMapSection = useCallback(async (key) => {
+    const current = worksMap.sectionsEnabled || DEFAULT_WORKS_MAP.sectionsEnabled;
+    const next = { ...current, [key]: current[key]===false ? true : false };
+    await saveWorksMapSection("sectionsEnabled", next);
+  }, [worksMap.sectionsEnabled, saveWorksMapSection]);
+
   const updateQuadrant = useCallback(async (patch) => {
     const next = typeof patch==="function" ? patch(worksMap.quadrant) : { ...worksMap.quadrant, ...patch };
     await saveWorksMapSection("quadrant", next);
@@ -797,7 +808,8 @@ function useStore() {
     worksMap, updateQuadrant, setQuadrantPoint, removeQuadrantPoint,
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
     updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, moveFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge, moveFlowEdge,
-    updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem };
+    updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem,
+    toggleMapSection };
 }
 
 // ═══════════════ HELPERS ═══════════════
@@ -2258,6 +2270,10 @@ function TenSenPage({novels,onOpenNovel}){
 function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
   const [tab,setTab]=useState("quadrant"); // quadrant | radar | flow
   const novelById = useMemo(()=>Object.fromEntries(novels.map(n=>[n.id,n])), [novels]);
+  const sectionsEnabled = worksMap.sectionsEnabled || { quadrant:true, radar:true, flow:true, ranking:true };
+  const InProgress = () => (
+    <div className="wmap-empty">🚧 制作中</div>
+  );
 
   return (
     <div className="wmap-wrap">
@@ -2278,7 +2294,9 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
             <div className="wmap-section-title">{worksMap.quadrant.title||"四象限マップ"}</div>
             {worksMap.quadrant.desc && <div className="wmap-section-desc">{worksMap.quadrant.desc}</div>}
           </div>
-          <QuadrantChart data={worksMap.quadrant} novelById={novelById} onOpenNovel={onOpenNovel}/>
+          {sectionsEnabled.quadrant!==false ? (
+            <QuadrantChart data={worksMap.quadrant} novelById={novelById} onOpenNovel={onOpenNovel}/>
+          ) : <InProgress/>}
         </div>
       )}
 
@@ -2288,7 +2306,9 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
             <div className="wmap-section-title">{worksMap.radar.title||"特徴レーダー"}</div>
             {worksMap.radar.desc && <div className="wmap-section-desc">{worksMap.radar.desc}</div>}
           </div>
-          <RadarChart data={worksMap.radar} novelById={novelById} onOpenNovel={onOpenNovel}/>
+          {sectionsEnabled.radar!==false ? (
+            <RadarChart data={worksMap.radar} novelById={novelById} onOpenNovel={onOpenNovel}/>
+          ) : <InProgress/>}
         </div>
       )}
 
@@ -2298,12 +2318,18 @@ function WorksMapPage({worksMap, novels, onOpenNovel, onBack}){
             <div className="wmap-section-title">{worksMap.flowchart.title||"フローチャート"}</div>
             {worksMap.flowchart.desc && <div className="wmap-section-desc">{worksMap.flowchart.desc}</div>}
           </div>
-          <FlowchartView data={worksMap.flowchart} novelById={novelById} onOpenNovel={onOpenNovel}/>
+          {sectionsEnabled.flow!==false ? (
+            <FlowchartView data={worksMap.flowchart} novelById={novelById} onOpenNovel={onOpenNovel}/>
+          ) : <InProgress/>}
         </div>
       )}
 
       {tab==="ranking" && (
-        <RankingTabView rankings={worksMap.rankings||[]} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        sectionsEnabled.ranking!==false ? (
+          <RankingTabView rankings={worksMap.rankings||[]} novelById={novelById} onOpenNovel={onOpenNovel}/>
+        ) : (
+          <div className="wmap-section fadein"><InProgress/></div>
+        )
       )}
     </div>
   );
@@ -3950,7 +3976,10 @@ function WorksMapAdmin({store}){
     updateRadar, addRadarAxis, updateRadarAxis, deleteRadarAxis, toggleRadarNovel, setRadarValue,
     updateFlowchart, addFlowNode, updateFlowNode, deleteFlowNode, moveFlowNode, addFlowEdge, updateFlowEdge, deleteFlowEdge, moveFlowEdge,
     updateRanking, addRanking, deleteRanking, addRankingItem, removeRankingItem, setRankingReason, moveRankingItem,
+    toggleMapSection,
   } = store;
+  const sectionsEnabled = worksMap.sectionsEnabled || { quadrant:true, radar:true, flow:true, ranking:true };
+  const sectionLabels = { quadrant:"四象限マップ", radar:"特徴レーダー", flow:"フローチャート", ranking:"ランキング" };
   const rankings = worksMap.rankings||[];
   const [activeRankingId, setActiveRankingId] = useState(rankings[0]?.id || null);
   useEffect(()=>{
@@ -3976,6 +4005,12 @@ function WorksMapAdmin({store}){
         <button className={`wmap-admin-tab ${tab==="radar"?"active":""}`} onClick={()=>setTab("radar")}>特徴レーダー</button>
         <button className={`wmap-admin-tab ${tab==="flow"?"active":""}`} onClick={()=>setTab("flow")}>フローチャート</button>
         <button className={`wmap-admin-tab ${tab==="ranking"?"active":""}`} onClick={()=>setTab("ranking")}>ランキング</button>
+      </div>
+      <div style={{background:"color-mix(in srgb,var(--bg) 92%,#888 8%)",border:"1px solid var(--border-hi)",borderRadius:3,padding:"4px 16px",marginBottom:24}}>
+        <div className="toggle-row">
+          <div><div className="toggle-label">👁 「{sectionLabels[tab]}」を公開</div><div className="toggle-desc">OFFにすると読者向けの作品マップでは「制作中」とだけ表示され、内容（{sectionLabels[tab]}の中身）は非表示になります（編集は引き続き可能です）</div></div>
+          <label className="toggle-switch"><input type="checkbox" checked={sectionsEnabled[tab]!==false} onChange={()=>toggleMapSection(tab)}/><span className="toggle-slider"/></label>
+        </div>
       </div>
       {tab==="quadrant" && (
         <QuadrantEditor
