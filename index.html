@@ -855,15 +855,26 @@ function fmtDate(iso){
 // 新しい作品が投稿・更新されるたびに novels が変わるので、この関数を
 // 呼ぶたびに最新のプールが再計算される（＝自動更新）。
 const MIN_LINE_LEN = 20;  // 短すぎる断片を候補から除く（旧: 8）
-const MAX_LINE_LEN = 140; // 長すぎる段落は10選としては読みにくいので除く
+const MAX_LINE_LEN = 320; // 長い段落もそのままプールに入るよう拡張（旧: 140。短文だけに偏らないため）
 
-// 「〜と〇〇は言った」のように、台詞のすぐ後ろに付く話者表示だけの短い一文は、
-// 単体で読んでも面白みのない断片になりがちなので、地の文10選の候補からは除外する。
-const SPEECH_TAG_RE = /^と[、,]?[^「」、,]{0,6}(は|が|も)?[、,]?(言|答え|呟|囁|叫|笑|頷|聞|尋|告げ|呼びかけ|怒鳴|漏ら|零し|返し|問|思|考え|感じ)[^「」]{0,10}[。.]?$/;
-const SHORT_SPEECH_TAG_RE = /^(と[^\n]{0,20}(言|答え|呟|囁|叫|笑|頷|返|問)[^\n]{0,8}[。.]?|と[^\n]{0,12}[。.]?)$/;
+// 隣接する地の文の段落どうしをつなげて、より長い一続きの抜粋も候補にする。
+// 一段落だけでは短すぎる断片も、前後とつなげることで地の文本来の呼吸や
+// 描写の積み重ねが伝わる長さの抜粋になる。
+const LONG_COMBO_MIN = 150; // これより短い組み合わせは単独の候補と重複しがちなので除く
+const LONG_COMBO_MAX = 320; // 読みにくくなりすぎない上限
+
+// 「〜と〇〇は言った」のように、話者表示だけで完結する一文・断片は、
+// 単体で読んでも面白みのない部分になりがちなので、地の文の候補からは除外する。
+const SPEECH_VERBS = "言|答え|呟|囁|叫|笑|頷|聞|尋|告げ|呼びかけ|怒鳴|漏ら|零し|返し|問|思|考え|感じ";
+// パターン1：セリフの直後に付く「と〜言った」のような断片（セリフを取り除いた残り）
+const SPEECH_TAG_RE = new RegExp(`^と[、,]?[^「」、,]{0,6}(は|が|も)?[、,]?(${SPEECH_VERBS})[^「」]{0,10}[。.]?$`);
+const SHORT_SPEECH_TAG_RE = new RegExp(`^(と[^\\n]{0,20}(${SPEECH_VERBS})[^\\n]{0,8}[。.]?|と[^\\n]{0,12}[。.]?)$`);
+// パターン2：セリフを伴わず「〇〇は静かに言った。」のように、話者表示だけで
+// 一文まるごと完結してしまっている場合（従来はこのパターンを見逃していた）
+const SPEECH_SENTENCE_RE = new RegExp(`^[^。「」\\n]{0,14}(は|が|も)[^。「」\\n]{0,14}(${SPEECH_VERBS})[^。「」\\n]{0,6}[。.]?$`);
 function isSpeechTagOnly(text){
-  if(text.length > 30) return false; // 長い場合は実質的な内容を含むとみなす
-  return SPEECH_TAG_RE.test(text) || SHORT_SPEECH_TAG_RE.test(text);
+  if(text.length > 40) return false; // ある程度の長さがあれば、実質的な描写を含むとみなす（旧: 30）
+  return SPEECH_TAG_RE.test(text) || SHORT_SPEECH_TAG_RE.test(text) || SPEECH_SENTENCE_RE.test(text);
 }
 
 function extractTenSenPool(novels){
@@ -873,6 +884,8 @@ function extractTenSenPool(novels){
   (novels||[]).forEach(novel => {
     (novel.chapters||[]).forEach(ch => {
       const lines = (ch.content||"").split("\n");
+      const pureNarrSegs = []; // このチャプター内で、セリフを含まない地の文段落を順番通りに集める（連結候補用）
+
       lines.forEach(raw => {
         const line = raw.trim();
         if(!line) return;
@@ -892,17 +905,37 @@ function extractTenSenPool(novels){
         const stripped = line.replace(/「[^「」]*」/g, "").trim();
         if(!hasQuote){
           // 元からセリフを含まない行はそのまま地の文として扱う
-          if(line.length >= MIN_LINE_LEN && line.length <= MAX_LINE_LEN && !isSpeechTagOnly(line)){
-            narration.push({ text:line, novelTitle:novel.title, novelId:novel.id, chapterId:ch.id });
-          }
+          if(!isSpeechTagOnly(line)) pureNarrSegs.push(line);
         } else if(stripped.length >= MIN_LINE_LEN && stripped.length <= MAX_LINE_LEN && !isSpeechTagOnly(stripped)){
           narration.push({ text:stripped, novelTitle:novel.title, novelId:novel.id, chapterId:ch.id });
         }
       });
+
+      // 1) 単独の段落をそのまま地の文候補に（従来通り、短文〜長めの段落まで）
+      pureNarrSegs.forEach(s => {
+        if(s.length >= MIN_LINE_LEN && s.length <= MAX_LINE_LEN){
+          narration.push({ text:s, novelTitle:novel.title, novelId:novel.id, chapterId:ch.id });
+        }
+      });
+
+      // 2) 隣接する段落どうしをつなげた、より長い一続きの抜粋も候補に加える
+      for(let i=0;i<pureNarrSegs.length-1;i++){
+        const combo2 = pureNarrSegs[i] + pureNarrSegs[i+1];
+        if(combo2.length >= LONG_COMBO_MIN && combo2.length <= LONG_COMBO_MAX){
+          narration.push({ text:combo2, novelTitle:novel.title, novelId:novel.id, chapterId:ch.id });
+        }
+        if(i < pureNarrSegs.length-2){
+          const combo3 = combo2 + pureNarrSegs[i+2];
+          if(combo3.length >= LONG_COMBO_MIN && combo3.length <= LONG_COMBO_MAX){
+            narration.push({ text:combo3, novelTitle:novel.title, novelId:novel.id, chapterId:ch.id });
+          }
+        }
+      }
     });
   });
   return { narration, dialogue };
 }
+
 
 // 配列からランダムにn件（重複なし）を取り出す
 function sampleN(arr, n){
