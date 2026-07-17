@@ -1114,7 +1114,7 @@ function Styles({site, lightMode}){
     .nc-dot{position:absolute;top:16px;right:16px;width:7px;height:7px;border-radius:50%}
     .nc-body{padding:20px 24px 24px}
     .nc-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}.nc-tag{font-size:8px;letter-spacing:.22em;text-transform:uppercase;color:var(--txt3);border:1px solid var(--border);padding:2px 7px}
-    .nc-title{font-family:var(--serif);font-size:26px;font-weight:300;color:var(--txt);line-height:1.15;margin-bottom:5px}
+    .nc-title{font-family:var(--serif);font-size:26px;font-weight:300;color:var(--txt);line-height:1.28;letter-spacing:.03em;margin-bottom:5px;word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}
     .nc-subtitle{font-size:11px;color:var(--txt3);font-style:italic;letter-spacing:.06em;margin-bottom:12px}
     .nc-desc{font-size:12px;line-height:1.9;color:var(--txt2);margin-bottom:18px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
     .nc-footer{display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border)}
@@ -1125,7 +1125,8 @@ function Styles({site, lightMode}){
     .detail-hero-bg{position:absolute;inset:0}.detail-hero-fade{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(7,7,15,.2),var(--bg) 100%)}
     .detail-hero-content{position:absolute;bottom:52px;left:0;right:0;max-width:800px;margin:0 auto;padding:0 48px}
     .detail-genre{font-size:9px;letter-spacing:.4em;color:var(--accent);text-transform:uppercase;margin-bottom:12px}
-    .detail-title{font-family:var(--serif);font-size:clamp(36px,7vw,66px);font-weight:300;color:var(--txt);line-height:1.1;margin-bottom:8px}
+    .detail-title{font-family:var(--serif);font-size:clamp(36px,7vw,66px);font-weight:300;color:var(--txt);line-height:1.25;letter-spacing:.02em;margin-bottom:8px;word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}
+    .detail-title-rule{width:36px;height:2px;margin:14px 0 16px;opacity:.75}
     .detail-subtitle{font-size:13px;color:var(--txt2);font-style:italic}
     .detail-body{max-width:800px;margin:0 auto;padding:0 48px 80px}
     .detail-meta-bar{display:flex;align-items:center;gap:24px;padding:24px 0;border-bottom:1px solid var(--border);margin-bottom:36px;flex-wrap:wrap}
@@ -2809,6 +2810,7 @@ function DetailPage({novel,onBack,onRead,onSendMessage}){
           <div className="detail-hero-content">
             <div className="detail-genre rise d1">{novel.genre}</div>
             <h1 className="detail-title rise d2">{novel.title}</h1>
+            <div className="detail-title-rule rise d2" style={{background:novel.accent||"var(--accent)"}}/>
             <div className="detail-subtitle rise d3">{novel.subtitle}</div>
           </div>
         </div>
