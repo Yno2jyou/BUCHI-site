@@ -1764,9 +1764,20 @@ function Styles({site, lightMode}){
 
     ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border-hi)}
     @media(max-width:680px){
-      .nav{padding:0 16px}.hero{padding:calc(var(--nav-h) + 40px) 20px 60px}.section,.detail-body{padding-left:20px;padding-right:20px}
+      .nav{padding:0 16px}.hero{padding:calc(var(--nav-h) + 40px) 20px 56px}.section,.detail-body{padding-left:20px;padding-right:20px}
       .detail-hero-content{padding:0 20px}.reading-content{padding-left:20px;padding-right:20px;padding-top:72px}.reading-foot{padding-left:20px;padding-right:20px}
       .profile-wrap,.htg-wrap{padding:calc(var(--nav-h) + 30px) 20px 72px}.footer{padding:32px 20px}
+      /* カード一覧の圧迫感を軽減：カード間に実際の余白を作り、独立したカードとして見せる */
+      .section{padding-bottom:72px}
+      .section-head{margin-bottom:26px;padding-bottom:14px}
+      .hero-stats{gap:30px}
+      .tag-bar{gap:8px;margin-bottom:28px}
+      .novels-grid{gap:14px;background:transparent}
+      .novel-card{border:1px solid var(--border);border-radius:5px}
+      .nc-cover{height:148px}
+      .nc-body{padding:18px 18px 20px}
+      .nc-desc{-webkit-line-clamp:2}
+      .date-group{margin-bottom:32px}
       .admin-overlay{flex-direction:column}
       .admin-sidebar{width:100%;max-height:none;height:100%}
       .admin-main{display:none;padding:20px 16px 120px}
